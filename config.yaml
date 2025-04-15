@@ -1,0 +1,21 @@
+agents:
+  agent_meteo:
+    nom: Agent Mateo
+    description: Agent qui fournit des informations météorologiques.
+    api_url: http://localhost:5001/
+    modele: gemini-pro  # Modèle Gemini à utiliser
+    parametres_api:  # Paramètres spécifiques pour l'appel à l'API Gemini
+      temperature: 0.7
+      max_output_tokens: 200
+    parametres:  # Paramètres spécifiques à l'agent (pour l'exemple)
+      ville_defaut: Paris
+
+  agent_traduction:
+    nom: Agent Traduction
+    description: Agent pour traduire du texte.
+    api_url: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent
+    modele: gemini-pro
+    parametres_api:
+      temperature: 0.2
+    parametres:
+      langue_defaut: anglais

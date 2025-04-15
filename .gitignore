@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.spec
+
+# Logs
+*.log
+
+# Virtual environments
+venv/
+.env/
+
+# OS generated files
+.DS_Store
+Thumbs.db
