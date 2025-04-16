@@ -1,0 +1,6 @@
+api_key: VOTRE_CLE_API_CLAUDE_ICI
+api_url: https://api.anthropic.com/v1/claude
+behavior: comportement initial
+default: false
+history: false
+model: Claude

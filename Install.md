@@ -66,9 +66,8 @@ Avant de lancer l'application, assurez-vous que la clé API est configurée. Si 
 
 ### Étapes :
 
-1. Lors du premier lancement de l'application, si le fichier `api_key.txt` n'existe pas ou est vide, un prompt s'affichera pour demander la clé API.
-2. Entrez la clé API dans le prompt.
-3. La clé sera enregistrée dans le fichier `api_key.txt` pour les utilisations futures.
+1. Lors du premier lancement de l'application, configurez la clé API via le menu SETUP.
+2. La clé sera enregistrée dans le fichier `api_key.txt` pour les utilisations futures.
 
 ### Exemple de Code :
 

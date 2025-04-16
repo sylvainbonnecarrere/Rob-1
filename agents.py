@@ -25,6 +25,15 @@ def charger_configuration(chemin_fichier):
         messagebox.showerror("Erreur", f"Impossible de charger la configuration : {e}")
         return None
 
+def verifier_ou_demander_cle_api():
+    """Supprime le prompt de demande de clé API au démarrage. La configuration se fait désormais via le menu SETUP."""
+    api_key_file = get_resource_path("api_key.txt")
+    if os.path.exists(api_key_file):
+        with open(api_key_file, "r") as file:
+            api_key = file.read().strip()
+            return api_key
+    return None  # Retourne None si aucune clé API n'est trouvée
+
 def tester_agent(agent_config, payload):
     """Teste un agent donné en envoyant une requête à son API."""
     try:
