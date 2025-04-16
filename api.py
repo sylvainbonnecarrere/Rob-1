@@ -65,39 +65,3 @@ def extraire_elements_text(data, chemin=""):
             resultats.extend(extraire_elements_text(element, nouveau_chemin))
 
     return resultats
-
-# Exemple d'utilisation
-data_complexe = {
-    "reponse_api": {
-        "candidates": [
-            {
-                "content": {
-                    "parts": [
-                        {
-                            "text": "Ceci est le texte de la réponse de l'IA."
-                        },
-                        {"other_info": 123}
-                    ],
-                    "role": "model"
-                },
-                "finishReason": "STOP"
-            }
-        ],
-        "usageMetadata": {"tokens": 45}
-    },
-    "autres_donnees": [
-        {"cle": "valeur1", "info": {"text": "Autre texte pertinent"}},
-        {"cle": "valeur2"}
-    ]
-}
-
-# Conversion en tableau
-dataframe = convertir_en_tableau(data_complexe)
-print("Tableau converti :")
-print(dataframe)
-
-# Extraction des éléments 'text'
-textes = extraire_elements_text(data_complexe)
-print("\nÉléments 'text' extraits :")
-for chemin, texte in textes:
-    print(f"{chemin} : {texte}")

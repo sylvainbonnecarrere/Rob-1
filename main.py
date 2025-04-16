@@ -17,25 +17,34 @@ def creer_fichiers_configuration():
     """Crée les fichiers de configuration pour Gemini, OpenAI et Claude."""
     configurations = {
         "Gemini": {
-            "model": "Gemini",
-            "api_url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-            "api_key": "VOTRE_CLE_API_GEMINI_ICI",
-            "behavior": "comportement initial",
-            "history": True
+            "nom": "Gemini",
+            "api_key": "",
+            "api_url": "",
+            "behavior": "",
+            "curl_exe": "",
+            "default": False,
+            "history": False,
+            "role": ""
         },
         "OpenAI": {
-            "model": "OpenAI",
-            "api_url": "https://api.openai.com/v1/completions",
-            "api_key": "VOTRE_CLE_API_OPENAI_ICI",
-            "behavior": "comportement initial",
-            "history": False
+            "nom": "OpenAI",
+            "api_key": "",
+            "api_url": "",
+            "behavior": "",
+            "curl_exe": "",
+            "default": False,
+            "history": False,
+            "role": ""
         },
         "Claude": {
-            "model": "Claude",
-            "api_url": "https://api.anthropic.com/v1/claude",
-            "api_key": "VOTRE_CLE_API_CLAUDE_ICI",
-            "behavior": "comportement initial",
-            "history": False
+            "nom": "Claude",
+            "api_key": "",
+            "api_url": "",
+            "behavior": "",
+            "curl_exe": "",
+            "default": False,
+            "history": False,
+            "role": ""
         }
     }
 
@@ -106,9 +115,6 @@ def verifier_ou_demander_cle_api():
 def main():
     """Point d'entrée principal de l'application."""
     logging.info("Application démarrée.")
-    creer_fichiers_configuration()
-    verifier_profil_gemini()
-    verifier_et_mettre_a_jour_profils()
     try:
         creer_interface()
     except Exception as e:
