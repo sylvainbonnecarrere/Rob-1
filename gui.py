@@ -172,11 +172,13 @@ def ouvrir_fenetre_apitest():
         if not question:
             champ_r.insert('1.0', "Veuillez saisir une question.")
         else:
-            # 1. Récupérer la valeur de api_url dans le profil
             api_url = profilAPIActuel.get('api_url', '')
-            print(f"[APItest] api_url du profil : {api_url}")
-            # 2. Chercher la valeur de api_url dans le champ cmd_api
+            curl_exe = profilAPIActuel.get('curl_exe', '')
             cmd_api = fenetre.cmd_api
+            print(f"[APItest] api_url : {api_url}")
+            print(f"[APItest] curl_exe : {curl_exe}")
+            print(f"[APItest] cmd_api : {cmd_api}")
+            # 1. Récupérer la valeur de api_url dans le profil
             if api_url and api_url in cmd_api:
                 champ_r.insert('1.0', f"[OK] L'URL '{api_url}' est bien présente dans la commande API.\n")
             else:
