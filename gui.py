@@ -1,14 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, simpledialog, Toplevel, Listbox, Menu, filedialog
-from agents import charger_configuration, tester_agent
-from api import envoyer_requete
-import subprocess
+from tkinter import ttk, messagebox, scrolledtext, Toplevel, Menu
 import os
-import json
-import chardet
 import sys
 import yaml
-import requests
+import subprocess
 
 PROFILES_DIR = "profiles"
 os.makedirs(PROFILES_DIR, exist_ok=True)
@@ -20,16 +15,7 @@ def get_resource_path(relative_path):
         base_path = sys._MEIPASS
     except AttributeError:
         base_path = os.path.abspath(".")
-
     return os.path.join(base_path, relative_path)
-
-def enregistrer_comportement():
-    """Placeholder function for registering a behavior."""
-    messagebox.showinfo("Enregistrer Comportement", "Cette fonctionnalité sera implémentée prochainement.")
-
-def tester_requete_api():
-    """Placeholder function for testing the API."""
-    messagebox.showinfo("Tester Requête API", "Cette fonctionnalité sera implémentée prochainement.")
 
 def ouvrir_fenetre_comportement():
     """Ouvre une fenêtre pour gérer les comportements."""
@@ -77,68 +63,141 @@ def lire_profil_defaut():
         messagebox.showerror("Erreur", f"Impossible de lire les profils : {e}")
         return None
 
-def ouvrir_fenetre_test_api():
-    """Ouvre une fenêtre pour tester l'API avec le profil par défaut."""
-    fenetre = tk.Tk()
-    fenetre.title("Test API")
-
-    # Charger le profil par défaut ou utiliser Gemini si aucun n'est défini
-    profil_defaut = lire_profil_defaut()
-    profil_nom = "Gemini"  # Par défaut
-
-    # Identifier le nom du fichier du profil par défaut
+def get_default_profile():
+    """Charge le profil par défaut ou retourne Gemini si aucun n'est défini."""
     for fichier in os.listdir(PROFILES_DIR):
         if fichier.endswith(".yaml"):
             chemin_fichier = os.path.join(PROFILES_DIR, fichier)
             with open(chemin_fichier, 'r') as f:
                 profil = yaml.safe_load(f)
                 if profil.get("default", False):
-                    profil_nom = fichier[:-5]  # Retirer l'extension .yaml
+                    return fichier[:-5]  # Retirer l'extension .yaml
+    return "Gemini"  # Retourne Gemini par défaut si aucun profil n'est marqué comme défaut
+
+def selectionProfilDefaut():
+    """
+    Parcourt les fichiers de profils dans 'profiles/', cherche le profil par défaut ('default: True'),
+    charge son contenu avec chargementProfil, sinon charge 'Gemini' par défaut.
+    Affiche le nom du profil chargé en haut de la fenêtre testAPI et logue le contenu.
+    """
+    import yaml
+    import os
+    global profilAPIActuel
+    profils_dir = "profiles"
+    profil_trouve = False
+    nom_profil_charge = None
+
+    for fichier in os.listdir(profils_dir):
+        if fichier.endswith(".yaml") or fichier.endswith(".yml") or fichier.endswith(".json"):
+            chemin_fichier = os.path.join(profils_dir, fichier)
+            try:
+                with open(chemin_fichier, "r", encoding="utf-8") as f:
+                    if fichier.endswith(".json"):
+                        import json
+                        profil = json.load(f)
+                    else:
+                        profil = yaml.safe_load(f)
+                if profil and profil.get("default", False):
+                    profilAPIActuel = profil
+                    nom_profil_charge = fichier
+                    profil_trouve = True
                     break
+            except Exception as e:
+                print(f"Erreur lors du chargement du profil {fichier} : {e}")
 
-    # Charger le profil par défaut avant de loguer
-    profil_defaut = lire_profil_defaut()
+    if not profil_trouve:
+        chemin_gemini = os.path.join(profils_dir, "Gemini.yaml")
+        if os.path.exists(chemin_gemini):
+            with open(chemin_gemini, "r", encoding="utf-8") as f:
+                profilAPIActuel = yaml.safe_load(f)
+            nom_profil_charge = "Gemini.yaml"
+        else:
+            profilAPIActuel = {}
+            nom_profil_charge = "Aucun profil trouvé"
 
-    # Charger le profil par défaut si les informations du profil ne sont pas trouvées
-    if not profil_defaut:
-        profil_defaut = lire_profil_defaut()
-        print("[INFO] Aucun profil trouvé, chargement du profil par défaut.")
+    print(f"Profil>{nom_profil_charge} chargé")
+    return nom_profil_charge, profilAPIActuel
 
-    # Log du profil utilisé à l'arrivée sur l'écran TESTAPI
-    if profil_defaut:
-        print(f"Profil API utilisé dans TESTAPI : {profil_defaut.get('nom', profil_nom)}")
+def ouvrir_fenetre_apitest():
+    """
+    Ouvre la fenêtre unique du module APItest avec navigation interne, chargement du profil par défaut,
+    création de la commande API, et gestion des champs Q/R.
+    """
+    import json
+    fenetre = tk.Toplevel(root)
+    fenetre.title("APItest")
+    fenetre.geometry("700x500")
 
-    # Surcharge temporaire pour le test Gemini
-    if profil_defaut and profil_defaut.get('model', '').lower() == 'gemini':
-        profil_defaut['curl_exe'] = (
-            "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY\" "
-            "-H 'Content-Type: application/json' "
-            "-X POST "
-            "-d '{\"contents\": [{\"parts\":[{\"text\": \"Explain how AI works\"}]}]}'"
-        )
-        profil_defaut['api_key'] = 'AIzaSyAI56WaXrkK1iFHNxp3_akHMFTN5-kabBk'
+    def on_close():
+        root.destroy()  # Ferme toute l'application proprement
+    fenetre.protocol("WM_DELETE_WINDOW", on_close)
 
-    # Champ pour la question (Q)
-    label_question = ttk.Label(fenetre, text="Question :")
-    label_question.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+    # 1. Chargement du profil par défaut (log affiché une seule fois)
+    nom_profil_charge, profilAPIActuel = selectionProfilDefaut()
 
-    champ_question = scrolledtext.ScrolledText(fenetre, width=60, height=5)
-    champ_question.grid(row=1, column=0, columnspan=2, padx=10, pady=5)
+    # 2. Création de la commande API (champ caché)
+    def creerCommandeAPI(profil):
+        if not profil:
+            return ""
+        curl_exe = profil.get('curl_exe', '')
+        api_key = profil.get('api_key', '')
+        if curl_exe and api_key:
+            return curl_exe.replace('GEMINI_API_KEY', api_key)
+        return curl_exe
 
-    bouton_envoyer = ttk.Button(fenetre, text="Envoyer", command=lambda: envoyer_requete(profil_defaut.get('api_key', ''), champ_question.get("1.0", tk.END).strip()))
-    bouton_envoyer.grid(row=2, column=0, padx=10, pady=5, sticky="w")
+    cmd_api = creerCommandeAPI(profilAPIActuel)
+    fenetre.cmd_api = cmd_api  # champ caché
 
-    # Champ pour la réponse (R)
-    label_reponse = ttk.Label(fenetre, text="Réponse :")
-    label_reponse.grid(row=3, column=0, sticky="w", padx=10, pady=5)
+    # 3. Interface utilisateur
+    label_profil = ttk.Label(fenetre, text=f"Profil API utilisé : {profilAPIActuel.get('profil', 'Inconnu')}")
+    label_profil.pack(pady=5)
 
-    champ_reponse = scrolledtext.ScrolledText(fenetre, width=60, height=10, state="normal")
-    champ_reponse.grid(row=4, column=0, columnspan=2, padx=10, pady=5)
+    # Champ Q (question)
+    label_q = ttk.Label(fenetre, text="Q :")
+    label_q.pack(anchor="w", padx=10)
+    champ_q = scrolledtext.ScrolledText(fenetre, width=80, height=5)
+    champ_q.pack(padx=10, pady=5)
 
-    bouton_effacer_reponse = ttk.Button(fenetre, text="Effacer R", command=lambda: champ_reponse.delete("1.0", tk.END))
-    bouton_effacer_reponse.grid(row=5, column=0, padx=10, pady=5, sticky="w")
+    # Champ R (réponse)
+    label_r = ttk.Label(fenetre, text="R :")
+    label_r.pack(anchor="w", padx=10)
+    champ_r = scrolledtext.ScrolledText(fenetre, width=80, height=10, state="normal")
+    champ_r.pack(padx=10, pady=5)
 
-    fenetre.mainloop()
+    # 4. Bouton Valider (soumission)
+    def soumettreQuestionAPI():
+        question = champ_q.get('1.0', tk.END).strip()
+        champ_r.config(state="normal")
+        champ_r.delete('1.0', tk.END)
+        if not question:
+            champ_r.insert('1.0', "Veuillez saisir une question.")
+        else:
+            # 1. Récupérer la valeur de api_url dans le profil
+            api_url = profilAPIActuel.get('api_url', '')
+            print(f"[APItest] api_url du profil : {api_url}")
+            # 2. Chercher la valeur de api_url dans le champ cmd_api
+            cmd_api = fenetre.cmd_api
+            if api_url and api_url in cmd_api:
+                champ_r.insert('1.0', f"[OK] L'URL '{api_url}' est bien présente dans la commande API.\n")
+            else:
+                champ_r.insert('1.0', f"[ERREUR] L'URL '{api_url}' n'est pas trouvée dans la commande API.\n")
+            # 3. Construction du prompt concaténé
+            role = profilAPIActuel.get('role', '').strip() or "pédagogue"
+            behavior = profilAPIActuel.get('behavior', '').strip() or "Précis, synthétique, court avec un résumé en bullet point."
+            prompt_concatene = (
+                "En tant que " + role +
+                ", à la fois expert, pédagogue et synthétique, nous attendons de toi le comportement suivant : " + behavior +
+                ". Ma question est la suivante : " + question
+            )
+            print(f"[APItest] Prompt concaténé : {prompt_concatene}")
+            champ_r.insert(tk.END, f"Prompt généré :\n{prompt_concatene}")
+        champ_r.config(state="disabled")
+
+    bouton_valider = ttk.Button(fenetre, text="Valider", command=soumettreQuestionAPI)
+    bouton_valider.pack(pady=10)
+
+    # 5. (Optionnel) Navigation interne (Retour/Avant)
+    # À implémenter si historique souhaité
 
 def open_setup_menu():
     setup_window = tk.Toplevel(root)
@@ -306,130 +365,6 @@ def open_setup_menu():
     bouton_annuler = ttk.Button(setup_window, text="Annuler", command=setup_window.destroy)
     bouton_annuler.grid(row=10, column=0, columnspan=3, pady=5)
 
-def QuestionAPI_filter(question):
-    """
-    Prépare et filtre la commande CURL pour le profil 'Gemini'.
-    """
-    # Charger le profil par défaut
-    profil_path = os.path.join(PROFILES_DIR, "Gemini.yaml")
-    with open(profil_path, 'r') as file:
-        profil = yaml.safe_load(file)
-
-    # Vérifier si le profil est 'Gemini'
-    if profil.get('model', '').lower() == 'gemini':
-        # Récupérer la commande CURL de 'curl_exe'
-        curl_command = profil.get('curl_exe', '')
-
-        # Remplacer 'GEMINI_API_KEY' par la clé API
-        api_key = profil.get('api_key', '')
-        curl_command = curl_command.replace('GEMINI_API_KEY', api_key)
-
-        # Préparer la question avec 'PrepareAPI_question'
-        prepared_question = PrepareAPI_question(question, profil)
-
-        # Remplacer 'Explain how AI works' par la question préparée
-        curl_command = curl_command.replace('Explain how AI works', prepared_question)
-
-        # Logs en console
-        print("--- Validation Requête API ---")
-        print(f"Profil utilisé: {profil.get('model', 'Inconnu')}")
-        print(f"URL API: {profil.get('api_url', 'Inconnu')}")
-        print(f"Clé API (tronquée): {api_key[:5]}...")
-        print(f"Commande CURL finale: {curl_command}")
-
-        # Affichage d'une fenêtre de validation
-        validation_window = tk.Toplevel()
-        validation_window.title("Validation de la Requête API")
-
-        tk.Label(validation_window, text="Profil utilisé:").pack()
-        tk.Label(validation_window, text=profil.get('model', 'Inconnu')).pack()
-
-        tk.Label(validation_window, text="URL API:").pack()
-        tk.Label(validation_window, text=profil.get('api_url', 'Inconnu')).pack()
-
-        tk.Label(validation_window, text="Clé API (tronquée):").pack()
-        tk.Label(validation_window, text=f"{api_key[:5]}...").pack()
-
-        tk.Label(validation_window, text="Commande CURL finale:").pack()
-        curl_text = tk.Text(validation_window, height=10, width=80)
-        curl_text.insert(tk.END, curl_command)
-        curl_text.pack()
-
-        def confirmer_et_executer():
-            validation_window.destroy()
-            try:
-                resultat = subprocess.check_output(curl_command, shell=True, text=True)
-                messagebox.showinfo("Succès", "Requête exécutée avec succès.")
-                print("Résultat:", resultat)
-            except subprocess.CalledProcessError as e:
-                messagebox.showerror("Erreur", f"Erreur lors de l'exécution de la commande: {e}")
-
-        def annuler():
-            validation_window.destroy()
-
-        tk.Button(validation_window, text="Confirmer et Exécuter", command=confirmer_et_executer).pack()
-        tk.Button(validation_window, text="Annuler", command=annuler).pack()
-
-        return curl_command
-    else:
-        raise ValueError("Le profil actuel n'est pas 'Gemini'.")
-
-def PrepareAPI_question(question, profil):
-    """
-    Prépare le texte de la question pour l'API Gemini et remplace les placeholders spécifiques.
-    """
-    # Exemple de traitement : suppression des espaces inutiles et encodage
-    question_prepared = question.strip()
-
-    # Si le profil est Gemini, remplacer GEMINI_API_KEY par la clé API
-    if profil.get('model', '').lower() == 'gemini':
-        api_key = profil.get('api_key', '')
-        question_prepared = question_prepared.replace('GEMINI_API_KEY', api_key)
-
-    return question_prepared
-
-def APIPreRequest(profil_api, question):
-    """
-    Prépare une commande CURL en fonction du profil API sélectionné et de la question utilisateur.
-    """
-    model_type = profil_api.get('model', '').lower()  # Identifier le type d'API
-    curl_command = ""
-
-    if not model_type:
-        print("Erreur : Le champ 'model' est vide ou absent dans le profil API.")
-        return ""
-
-    if model_type not in ['gemini', 'chatgpt', 'claude']:
-        print(f"Type d'API non supporté: {model_type}")
-        return ""
-
-    if model_type == 'gemini':
-        curl_exe = profil_api.get('curl_exe', "")
-        curl_command_with_key = curl_exe.replace('GEMINI_API_KEY', profil_api.get('api_key', ""))
-        default_question = "Explain how AI works"  # Identifier la question par défaut
-        role = profil_api.get('role', "")
-        behavior = profil_api.get('behavior', "")
-
-        new_question = "En tant que "
-        if role:
-            new_question += role
-        if behavior:
-            new_question += f" Tu as le comportement suivant : {behavior}"
-        new_question += f". Ma question est la suivante : {question}"
-
-        curl_command = curl_command_with_key.replace(default_question, new_question)
-    elif model_type == 'chatgpt':
-        curl_command = profil_api.get('curl_exe', "")
-        # Traitement spécifique ChatGPT (à venir)
-    elif model_type == 'claude':
-        curl_command = profil_api.get('curl_exe', "")
-        # Traitement spécifique Claude (à venir)
-    else:
-        print(f"Type d'API non supporté: {model_type}")
-        return ""
-
-    return curl_command
-
 def creer_interface():
     """Crée l'interface graphique principale avec une barre de menu."""
     global root
@@ -441,7 +376,7 @@ def creer_interface():
 
     # Menu API (anciennement Test API)
     menu_api = Menu(menu_bar, tearoff=0)
-    menu_api.add_command(label="Test API", command=ouvrir_fenetre_test_api)
+    menu_api.add_command(label="Test API", command=ouvrir_fenetre_apitest)
     menu_api.add_command(label="Set up API", command=open_setup_menu)
     menu_bar.add_cascade(label="API", menu=menu_api)
 

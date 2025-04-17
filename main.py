@@ -1,6 +1,7 @@
 import logging
 import os
 import yaml
+import subprocess
 from gui import creer_interface
 
 # Configure logging
@@ -17,6 +18,7 @@ def creer_fichiers_configuration():
     """Crée les fichiers de configuration pour Gemini, OpenAI et Claude."""
     configurations = {
         "Gemini": {
+            "profil": "Gemini",
             "nom": "Gemini",
             "api_key": "",
             "api_url": "",
@@ -27,6 +29,7 @@ def creer_fichiers_configuration():
             "role": ""
         },
         "OpenAI": {
+            "profil": "OpenAI",
             "nom": "OpenAI",
             "api_key": "",
             "api_url": "",
@@ -37,6 +40,7 @@ def creer_fichiers_configuration():
             "role": ""
         },
         "Claude": {
+            "profil": "Claude",
             "nom": "Claude",
             "api_key": "",
             "api_url": "",
@@ -111,6 +115,23 @@ def verifier_et_mettre_a_jour_profils():
 def verifier_ou_demander_cle_api():
     """Supprimé : La clé API sera configurée via le formulaire SETUP."""
     pass
+
+def execute_curl():
+    curl_command = [
+        "curl",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyAI56WaXrkK1iFHNxp3_akHMFTN5-kabBk",
+        "-H", "Content-Type: application/json",
+        "-X", "POST",
+        "-d", '{"contents": [{"parts":[{"text": "En tant qu\'expert vendeur. Ton comportement est défini ainsi : excité. J\'aimerais te poser la question suivante : "}]}]}'
+    ]
+
+    try:
+        result = subprocess.run(curl_command, capture_output=True, text=True, check=True)
+        print("Réponse de l'API :")
+        print(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print("Erreur lors de l'exécution de la requête CURL :")
+        print(e.stderr)
 
 def main():
     """Point d'entrée principal de l'application."""
