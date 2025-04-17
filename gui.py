@@ -192,7 +192,10 @@ def ouvrir_fenetre_apitest():
                 ". Ma question est la suivante : " + question
             )
             print(f"[APItest] Prompt concaténé : {prompt_concatene}")
-            champ_r.insert(tk.END, f"Prompt généré :\n{prompt_concatene}")
+            champ_r.insert(tk.END, f"Prompt généré :\n{prompt_concatene}\n")
+            # Remplacement dans cmd_api de la chaîne correspondant à api_url par le prompt concaténé
+            final_prompt = cmd_api.replace(api_url, prompt_concatene)
+            print(f"[APItest] final_prompt : {final_prompt}")
         champ_r.config(state="disabled")
 
     bouton_valider = ttk.Button(fenetre, text="Valider", command=soumettreQuestionAPI)
