@@ -172,6 +172,62 @@ def corriger_commande_curl(commande):
 
     return commande_corrigee
 
+def charger_profil_api():
+    """
+    Charge le profil API par défaut ou retourne Gemini si aucun n'est défini.
+    """
+    nom_profil_charge, profil = selectionProfilDefaut()
+    print(f"Profil chargé : {nom_profil_charge}")
+    return profil
+
+def generer_prompt(question, profil):
+    """
+    Génère le prompt à partir de la question et du profil API.
+    """
+    role = profil.get('role', '').strip() or "pédagogue"
+    behavior = profil.get('behavior', '').strip() or "Précis, synthétique, court avec un résumé en bullet point."
+    return (
+        f"En tant que {role}, à la fois expert, pédagogue et synthétique, nous attendons de toi le comportement suivant : {behavior}. "
+        f"Ma question est la suivante : {question}"
+    )
+
+def executer_commande_curl(requete_curl):
+    """
+    Exécute la commande curl et retourne le résultat.
+    """
+    print("Commande corrigée avant exécution :", requete_curl)
+    resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True)
+    print("Code de retour :", resultat.returncode)
+    print("stdout :", resultat.stdout)
+    print("stderr :", resultat.stderr)
+    return resultat
+
+def afficher_resultat(resultat, requete_curl, champ_r):
+    """
+    Affiche le résultat de la commande curl dans le champ R.
+    """
+    if resultat.returncode == 0:
+        champ_r.insert(tk.END, f"Réponse de l'API :\n{resultat.stdout}\n")
+    else:
+        champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
+
+def soumettreQuestionAPI(champ_q, champ_r):
+    question = champ_q.get('1.0', tk.END).strip()
+    champ_r.config(state="normal")
+    champ_r.delete('1.0', tk.END)
+    if not question:
+        champ_r.insert('1.0', "Veuillez saisir une question.")
+        champ_r.config(state="disabled")
+        return
+
+    profil = charger_profil_api()
+    prompt_concatene = generer_prompt(question, profil)
+    requete_curl = preparer_requete_curl(prompt_concatene)
+    requete_curl = corriger_commande_curl(requete_curl)
+    resultat = executer_commande_curl(requete_curl)
+    afficher_resultat(resultat, requete_curl, champ_r)
+    champ_r.config(state="disabled")
+
 def ouvrir_fenetre_apitest():
     """
     Ouvre la fenêtre unique du module APItest avec navigation interne, chargement du profil par défaut,
@@ -219,64 +275,7 @@ def ouvrir_fenetre_apitest():
     champ_r.pack(padx=10, pady=5)
 
     # 4. Bouton Valider (soumission)
-    def soumettreQuestionAPI():
-        question = champ_q.get('1.0', tk.END).strip()
-        champ_r.config(state="normal")
-        champ_r.delete('1.0', tk.END)
-        if not question:
-            champ_r.insert('1.0', "Veuillez saisir une question.")
-        else:
-            role = profilAPIActuel.get('role', '').strip() or "pédagogue"
-            behavior = profilAPIActuel.get('behavior', '').strip() or "Précis, synthétique, court avec un résumé en bullet point."
-            prompt_concatene = (
-                "En tant que " + role +
-                ", à la fois expert, pédagogue et synthétique, nous attendons de toi le comportement suivant : " + behavior +
-                ". Ma question est la suivante : " + question
-            )
-            # Appel à la fonction pour préparer la requête curl
-            requete_curl = preparer_requete_curl(prompt_concatene)
-
-            # Corriger la commande curl avant exécution
-            requete_curl = corriger_commande_curl(requete_curl)
-            print("Commande corrigée avant exécution :", requete_curl)
-
-            try:
-                # Exécuter la commande curl en subprocess
-                resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True)
-
-                # Log des résultats après exécution
-                print("Code de retour :", resultat.returncode)
-                print("stdout :", resultat.stdout)
-                print("stderr :", resultat.stderr)
-
-                if resultat.returncode == 0:
-                    champ_r.insert(tk.END, f"Réponse de l'API :\n{resultat.stdout}\n")
-                else:
-                    champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
-
-                # Afficher également la commande corrigée loguée en console dans le prompt R
-                champ_r.insert(tk.END, f"\nCommande corrigée envoyée :\n{requete_curl}\n")
-
-                # Stratégie de débogage : écrire les détails dans un fichier log
-                with open("debug_curl.log", "w") as debug_log:
-                    debug_log.write("Commande exécutée :\n")
-                    debug_log.write(requete_curl + "\n\n")
-                    debug_log.write("Code de retour :\n")
-                    debug_log.write(str(resultat.returncode) + "\n\n")
-                    debug_log.write("stdout :\n")
-                    debug_log.write(resultat.stdout + "\n\n")
-                    debug_log.write("stderr :\n")
-                    debug_log.write(resultat.stderr + "\n\n")
-            except Exception as e:
-                # Log de l'exception
-                print("Exception lors de l'exécution de la commande curl :", e)
-                champ_r.insert(tk.END, f"Une exception s'est produite : {e}\n")
-                with open("debug_curl.log", "w") as debug_log:
-                    debug_log.write(f"Exception lors de l'exécution : {e}\n")
-
-        champ_r.config(state="disabled")
-
-    bouton_valider = ttk.Button(fenetre, text="Valider", command=soumettreQuestionAPI)
+    bouton_valider = ttk.Button(fenetre, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r))
     bouton_valider.pack(pady=10)
 
     # 5. (Optionnel) Navigation interne (Retour/Avant)
