@@ -254,8 +254,8 @@ def ouvrir_fenetre_apitest():
                 else:
                     champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
 
-                # Afficher également la réponse dans le prompt R
-                champ_r.insert(tk.END, f"\nPrompt envoyé :\n{requete_curl}\n")
+                # Afficher également la commande corrigée loguée en console dans le prompt R
+                champ_r.insert(tk.END, f"\nCommande corrigée envoyée :\n{requete_curl}\n")
 
                 # Stratégie de débogage : écrire les détails dans un fichier log
                 with open("debug_curl.log", "w") as debug_log:
