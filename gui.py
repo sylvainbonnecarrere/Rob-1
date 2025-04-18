@@ -138,6 +138,40 @@ def preparer_requete_curl(final_prompt):
 
     return curl_exe
 
+def corriger_commande_curl(commande):
+    """
+    Corrige une commande curl pour Windows en échappant correctement les guillemets et en reformattant le JSON.
+    """
+    import json
+
+    # Supprimer les barres obliques inverses et les sauts de ligne
+    commande_corrigee = commande.replace('\\\n', '').replace('\n', '').strip()
+
+    # Identifier et reformater les données JSON dans la commande
+    if '-d' in commande_corrigee:
+        try:
+            # Extraire la partie JSON après '-d'
+            debut_json = commande_corrigee.index('-d') + 2
+            json_brut = commande_corrigee[debut_json:].strip()
+
+            # Nettoyer les guillemets simples et reformater en JSON valide
+            json_brut = json_brut.strip("'")
+            json_data = json.loads(json_brut)  # Charger en tant qu'objet Python
+            json_valide = json.dumps(json_data)  # Reformater en JSON compact
+
+            # Échapper les guillemets pour Windows
+            json_valide = json_valide.replace('"', '\\"')
+
+            # Remplacer l'ancien JSON par le nouveau
+            commande_corrigee = commande_corrigee[:debut_json] + f' "{json_valide}"'
+        except Exception as e:
+            print("Erreur lors du reformatage du JSON :", e)
+
+    # Remplacer les guillemets simples dans les en-têtes par des guillemets doubles
+    commande_corrigee = commande_corrigee.replace("'Content-Type: application/json'", '"Content-Type: application/json"')
+
+    return commande_corrigee
+
 def ouvrir_fenetre_apitest():
     """
     Ouvre la fenêtre unique du module APItest avec navigation interne, chargement du profil par défaut,
@@ -199,9 +233,47 @@ def ouvrir_fenetre_apitest():
                 ", à la fois expert, pédagogue et synthétique, nous attendons de toi le comportement suivant : " + behavior +
                 ". Ma question est la suivante : " + question
             )
-            # Appel à la nouvelle fonction pour préparer la requête curl
+            # Appel à la fonction pour préparer la requête curl
             requete_curl = preparer_requete_curl(prompt_concatene)
-            champ_r.insert(tk.END, f"Requête curl préparée :\n{requete_curl}\n")
+
+            # Corriger la commande curl avant exécution
+            requete_curl = corriger_commande_curl(requete_curl)
+            print("Commande corrigée avant exécution :", requete_curl)
+
+            try:
+                # Exécuter la commande curl en subprocess
+                resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True)
+
+                # Log des résultats après exécution
+                print("Code de retour :", resultat.returncode)
+                print("stdout :", resultat.stdout)
+                print("stderr :", resultat.stderr)
+
+                if resultat.returncode == 0:
+                    champ_r.insert(tk.END, f"Réponse de l'API :\n{resultat.stdout}\n")
+                else:
+                    champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
+
+                # Afficher également la réponse dans le prompt R
+                champ_r.insert(tk.END, f"\nPrompt envoyé :\n{requete_curl}\n")
+
+                # Stratégie de débogage : écrire les détails dans un fichier log
+                with open("debug_curl.log", "w") as debug_log:
+                    debug_log.write("Commande exécutée :\n")
+                    debug_log.write(requete_curl + "\n\n")
+                    debug_log.write("Code de retour :\n")
+                    debug_log.write(str(resultat.returncode) + "\n\n")
+                    debug_log.write("stdout :\n")
+                    debug_log.write(resultat.stdout + "\n\n")
+                    debug_log.write("stderr :\n")
+                    debug_log.write(resultat.stderr + "\n\n")
+            except Exception as e:
+                # Log de l'exception
+                print("Exception lors de l'exécution de la commande curl :", e)
+                champ_r.insert(tk.END, f"Une exception s'est produite : {e}\n")
+                with open("debug_curl.log", "w") as debug_log:
+                    debug_log.write(f"Exception lors de l'exécution : {e}\n")
+
         champ_r.config(state="disabled")
 
     bouton_valider = ttk.Button(fenetre, text="Valider", command=soumettreQuestionAPI)
