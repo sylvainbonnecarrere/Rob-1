@@ -277,7 +277,8 @@ def ouvrir_fenetre_apitest():
     fenetre.cmd_api = cmd_api  # champ caché
 
     # 3. Interface utilisateur
-    label_profil = ttk.Label(fenetre, text=f"Profil API utilisé : {profilAPIActuel.get('profil', 'Inconnu')}")
+    # Afficher le nom du profil API par défaut ou le préfixe du fichier
+    label_profil = ttk.Label(fenetre, text=f"Profil : {nom_profil_charge.split('.')[0]}")
     label_profil.pack(pady=5)
 
     # Champ Q (question)
