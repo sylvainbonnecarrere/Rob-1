@@ -204,28 +204,16 @@ def executer_commande_curl(requete_curl):
     print("stderr :", resultat.stderr)
     return resultat
 
-def afficher_resultat(resultat, requete_curl, champ_r):
+def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     """
     Affiche le résultat de la commande curl dans le champ R.
     """
     champ_r.delete('1.0', tk.END)  # Nettoyer le champ avant d'afficher le résultat
 
     if resultat.returncode == 0:
-        try:
-            # Charger la réponse JSON
-            reponse_json = json.loads(resultat.stdout)
-
-            # Extraire le texte cible : candidates[0].content.parts[0].text
-            texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
-
-            # Corriger l'encodage en supposant un encodage mal interprété
-            texte_cible = texte_cible.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore')
-
-            # Afficher uniquement le texte extrait corrigé
-            champ_r.insert(tk.END, texte_cible)
-        except (KeyError, IndexError, json.JSONDecodeError) as e:
-            champ_r.insert(tk.END, "Erreur lors de l'extraction ou du traitement du texte :\n")
-            champ_r.insert(tk.END, str(e))
+        champ_r.insert(tk.END, f"Réponse de l'API :\n{resultat.stdout}\n")
+        # Supprimer le contenu du prompteur Q si la réponse s'est bien déroulée
+        champ_q.delete('1.0', tk.END)
     else:
         champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
 
@@ -243,7 +231,7 @@ def soumettreQuestionAPI(champ_q, champ_r):
     requete_curl = preparer_requete_curl(prompt_concatene)
     requete_curl = corriger_commande_curl(requete_curl)
     resultat = executer_commande_curl(requete_curl)
-    afficher_resultat(resultat, requete_curl, champ_r)
+    afficher_resultat(resultat, requete_curl, champ_r, champ_q)
     champ_r.config(state="disabled")
 
 def ouvrir_fenetre_apitest():
