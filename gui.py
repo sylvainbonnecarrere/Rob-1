@@ -4,6 +4,7 @@ import os
 import sys
 import yaml
 import subprocess
+import json
 
 PROFILES_DIR = "profiles"
 os.makedirs(PROFILES_DIR, exist_ok=True)
@@ -206,8 +207,21 @@ def afficher_resultat(resultat, requete_curl, champ_r):
     """
     Affiche le résultat de la commande curl dans le champ R.
     """
+    champ_r.delete('1.0', tk.END)  # Nettoyer le champ avant d'afficher le résultat
+
     if resultat.returncode == 0:
-        champ_r.insert(tk.END, f"Réponse de l'API :\n{resultat.stdout}\n")
+        try:
+            # Charger la réponse JSON
+            reponse_json = json.loads(resultat.stdout)
+
+            # Extraire le texte cible : candidates[0].content.parts[0].text
+            texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+
+            # Afficher uniquement le texte extrait
+            champ_r.insert(tk.END, texte_cible)
+        except (KeyError, IndexError, json.JSONDecodeError) as e:
+            champ_r.insert(tk.END, "Erreur lors de l'extraction du texte ou du parsing JSON :\n")
+            champ_r.insert(tk.END, str(e))
     else:
         champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
 
