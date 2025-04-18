@@ -118,7 +118,7 @@ def selectionProfilDefaut():
     print(f"Profil>{nom_profil_charge} chargé")
     return nom_profil_charge, profilAPIActuel
 
-# Correction de la fonction preparer_requete_curl pour éviter les opérations inutiles
+# Correction pour s'assurer que GEMINI_API_KEY est remplacé correctement
 
 def preparer_requete_curl(final_prompt):
     """
@@ -128,7 +128,7 @@ def preparer_requete_curl(final_prompt):
     api_key = profilAPIActuel.get('api_key', '')
 
     # Si le profil est Gemini, remplacer GEMINI_API_KEY par api_key
-    if profilAPIActuel.get('profil', '').lower() == 'gemini':
+    if 'GEMINI_API_KEY' in curl_exe:
         curl_exe = curl_exe.replace('GEMINI_API_KEY', api_key)
 
     # Remplacer uniquement la chaîne de caractère api_url par final_prompt
