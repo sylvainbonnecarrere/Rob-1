@@ -5,6 +5,7 @@ import sys
 import yaml
 import subprocess
 import json
+import charset_normalizer
 
 PROFILES_DIR = "profiles"
 os.makedirs(PROFILES_DIR, exist_ok=True)
@@ -217,10 +218,13 @@ def afficher_resultat(resultat, requete_curl, champ_r):
             # Extraire le texte cible : candidates[0].content.parts[0].text
             texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
 
-            # Afficher uniquement le texte extrait
+            # Corriger l'encodage en supposant un encodage mal interprété
+            texte_cible = texte_cible.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore')
+
+            # Afficher uniquement le texte extrait corrigé
             champ_r.insert(tk.END, texte_cible)
         except (KeyError, IndexError, json.JSONDecodeError) as e:
-            champ_r.insert(tk.END, "Erreur lors de l'extraction du texte ou du parsing JSON :\n")
+            champ_r.insert(tk.END, "Erreur lors de l'extraction ou du traitement du texte :\n")
             champ_r.insert(tk.END, str(e))
     else:
         champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
