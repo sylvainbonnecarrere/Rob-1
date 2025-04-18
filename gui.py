@@ -105,7 +105,7 @@ def selectionProfilDefaut():
                     profil_trouve = True
                     break
             except Exception as e:
-                print(f"Erreur lors du chargement du profil {fichier} : {e}")
+                pass
 
     if not profil_trouve:
         chemin_gemini = os.path.join(profils_dir, "Gemini.yaml")
@@ -117,7 +117,6 @@ def selectionProfilDefaut():
             profilAPIActuel = {}
             nom_profil_charge = "Aucun profil trouvé"
 
-    print(f"Profil>{nom_profil_charge} chargé")
     return nom_profil_charge, profilAPIActuel
 
 # Correction pour s'assurer que GEMINI_API_KEY est remplacé correctement
@@ -167,7 +166,7 @@ def corriger_commande_curl(commande):
             # Remplacer l'ancien JSON par le nouveau
             commande_corrigee = commande_corrigee[:debut_json] + f' "{json_valide}"'
         except Exception as e:
-            print("Erreur lors du reformatage du JSON :", e)
+            pass
 
     # Remplacer les guillemets simples dans les en-têtes par des guillemets doubles
     commande_corrigee = commande_corrigee.replace("'Content-Type: application/json'", '"Content-Type: application/json"')
@@ -179,7 +178,6 @@ def charger_profil_api():
     Charge le profil API par défaut ou retourne Gemini si aucun n'est défini.
     """
     nom_profil_charge, profil = selectionProfilDefaut()
-    print(f"Profil chargé : {nom_profil_charge}")
     return profil
 
 def generer_prompt(question, profil):
@@ -197,11 +195,7 @@ def executer_commande_curl(requete_curl):
     """
     Exécute la commande curl et retourne le résultat.
     """
-    print("Commande corrigée avant exécution :", requete_curl)
     resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True)
-    print("Code de retour :", resultat.returncode)
-    print("stdout :", resultat.stdout)
-    print("stderr :", resultat.stderr)
     return resultat
 
 def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
