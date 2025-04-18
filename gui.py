@@ -211,7 +211,18 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     champ_r.delete('1.0', tk.END)  # Nettoyer le champ avant d'afficher le résultat
 
     if resultat.returncode == 0:
-        champ_r.insert(tk.END, f"Réponse de l'API :\n{resultat.stdout}\n")
+        try:
+            reponse_json = json.loads(resultat.stdout)
+            # Extraire le texte cible : candidates[0].content.parts[0].text
+            texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+
+            # Corriger l'encodage en supposant un encodage mal interprété
+            texte_cible = texte_cible.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore')
+
+            # Afficher uniquement le texte extrait corrigé
+            champ_r.insert(tk.END, texte_cible)
+        except Exception as e:
+            champ_r.insert(tk.END, f"Erreur lors de l'analyse de la réponse : {e}\n{resultat.stdout}")
         # Supprimer le contenu du prompteur Q si la réponse s'est bien déroulée
         champ_q.delete('1.0', tk.END)
     else:
