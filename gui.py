@@ -118,6 +118,26 @@ def selectionProfilDefaut():
     print(f"Profil>{nom_profil_charge} chargé")
     return nom_profil_charge, profilAPIActuel
 
+# Correction de la fonction preparer_requete_curl pour éviter les opérations inutiles
+
+def preparer_requete_curl(final_prompt):
+    """
+    Prépare une commande curl en utilisant le final_prompt et retourne une chaîne de caractères.
+    """
+    curl_exe = profilAPIActuel.get('curl_exe', '')
+    api_key = profilAPIActuel.get('api_key', '')
+
+    # Si le profil est Gemini, remplacer GEMINI_API_KEY par api_key
+    if profilAPIActuel.get('profil', '').lower() == 'gemini':
+        curl_exe = curl_exe.replace('GEMINI_API_KEY', api_key)
+
+    # Remplacer uniquement la chaîne de caractère api_url par final_prompt
+    api_url = profilAPIActuel.get('api_url', '')
+    if api_url in curl_exe:
+        curl_exe = curl_exe.replace(api_url, final_prompt)
+
+    return curl_exe
+
 def ouvrir_fenetre_apitest():
     """
     Ouvre la fenêtre unique du module APItest avec navigation interne, chargement du profil par défaut,
@@ -172,18 +192,6 @@ def ouvrir_fenetre_apitest():
         if not question:
             champ_r.insert('1.0', "Veuillez saisir une question.")
         else:
-            api_url = profilAPIActuel.get('api_url', '')
-            curl_exe = profilAPIActuel.get('curl_exe', '')
-            cmd_api = fenetre.cmd_api
-            print(f"[APItest] api_url : {api_url}")
-            print(f"[APItest] curl_exe : {curl_exe}")
-            print(f"[APItest] cmd_api : {cmd_api}")
-            # 1. Récupérer la valeur de api_url dans le profil
-            if api_url and api_url in cmd_api:
-                champ_r.insert('1.0', f"[OK] L'URL '{api_url}' est bien présente dans la commande API.\n")
-            else:
-                champ_r.insert('1.0', f"[ERREUR] L'URL '{api_url}' n'est pas trouvée dans la commande API.\n")
-            # 3. Construction du prompt concaténé
             role = profilAPIActuel.get('role', '').strip() or "pédagogue"
             behavior = profilAPIActuel.get('behavior', '').strip() or "Précis, synthétique, court avec un résumé en bullet point."
             prompt_concatene = (
@@ -191,11 +199,9 @@ def ouvrir_fenetre_apitest():
                 ", à la fois expert, pédagogue et synthétique, nous attendons de toi le comportement suivant : " + behavior +
                 ". Ma question est la suivante : " + question
             )
-            print(f"[APItest] Prompt concaténé : {prompt_concatene}")
-            champ_r.insert(tk.END, f"Prompt généré :\n{prompt_concatene}\n")
-            # Remplacement dans cmd_api de la chaîne correspondant à api_url par le prompt concaténé
-            final_prompt = cmd_api.replace(api_url, prompt_concatene)
-            print(f"[APItest] final_prompt : {final_prompt}")
+            # Appel à la nouvelle fonction pour préparer la requête curl
+            requete_curl = preparer_requete_curl(prompt_concatene)
+            champ_r.insert(tk.END, f"Requête curl préparée :\n{requete_curl}\n")
         champ_r.config(state="disabled")
 
     bouton_valider = ttk.Button(fenetre, text="Valider", command=soumettreQuestionAPI)
