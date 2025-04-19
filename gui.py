@@ -233,8 +233,19 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     else:
         champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
 
+# Correction pour s'assurer que l'historique est bien concaténé avec le prompt Q et envoyé comme valeur
 def soumettreQuestionAPI(champ_q, champ_r, champ_history):
     question = champ_q.get('1.0', tk.END).strip()
+
+    # Log du contenu de l'historique et du prompt Q
+    historique = champ_history.get('1.0', tk.END).strip()
+    log_variable = f"Historique discussion : {historique} \nNouvelle question : {question}"
+    print(log_variable)
+
+    # Transformation du prompt Q si history est activé
+    if profilAPIActuel.get('history', False):
+        question = f"{historique}\n{question}".strip()
+
     champ_r.config(state="normal")
     champ_r.delete('1.0', tk.END)
     if not question:
@@ -247,26 +258,16 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history):
     requete_curl = preparer_requete_curl(prompt_concatene)
     requete_curl = corriger_commande_curl(requete_curl)
 
-    # Initialisation de l'historique
-    historique = champ_history.get('1.0', tk.END).strip()
-
-    # Préfixer la question avec l'historique si activé
-    if profilAPIActuel.get('history', False) and historique:
-        question = f"{historique}\n{question}"
-
-    # Afficher le prompt final enrichi dans le champ R
-    champ_r.insert(tk.END, f"Prompt final envoyé :\n{question}\n\n")
-
     # Exécuter la commande curl et afficher le résultat
     resultat = executer_commande_curl(requete_curl)
     afficher_resultat(resultat, requete_curl, champ_r, champ_q)
 
-    # Mettre à jour l'historique avec la nouvelle réponse
+    # Mettre à jour l'historique avec la nouvelle question et réponse
     if resultat.returncode == 0:
         try:
             reponse_json = json.loads(resultat.stdout)
             texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
-            nouveau_historique = f"Précédemment : {texte_cible}"
+            nouveau_historique = f"Question : {question}\nRéponse : {texte_cible}"
             champ_history.delete('1.0', tk.END)
             champ_history.insert(tk.END, f"{historique}\n{nouveau_historique}".strip())
         except Exception as e:
