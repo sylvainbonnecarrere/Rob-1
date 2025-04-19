@@ -195,8 +195,19 @@ def executer_commande_curl(requete_curl):
     """
     Exécute la commande curl et retourne le résultat.
     """
-    resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True)
+    # Forcer l'encodage UTF-8 dans subprocess.run
+    resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True, encoding='utf-8')
     return resultat
+
+# Plan de tests pour les logs en console
+# 1. Vérifier que les commandes curl s'exécutent correctement et que la sortie est capturée en UTF-8.
+# 2. Simuler une réponse contenant des caractères spéciaux pour s'assurer qu'ils sont correctement affichés.
+# 3. Tester avec des profils contenant des caractères non-ASCII dans les champs (par exemple, rôle ou comportement).
+# 4. Vérifier que les erreurs de décodage (UnicodeDecodeError) ne se produisent plus.
+# 5. Ajouter des logs en console pour afficher les étapes critiques :
+#    - Commande curl exécutée
+#    - Résultat brut de la commande
+#    - Texte extrait après traitement.
 
 def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     """
@@ -210,11 +221,11 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
             # Extraire le texte cible : candidates[0].content.parts[0].text
             texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
 
-            # Corriger l'encodage en supposant un encodage mal interprété
-            texte_cible = texte_cible.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore')
+            # Corriger l'encodage du texte avant de l'afficher dans le champ R
+            texte_cible_corrige = texte_cible.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
 
-            # Afficher uniquement le texte extrait corrigé
-            champ_r.insert(tk.END, texte_cible)
+            # Afficher le texte corrigé dans le champ R
+            champ_r.insert(tk.END, texte_cible_corrige)
         except Exception as e:
             champ_r.insert(tk.END, f"Erreur lors de l'analyse de la réponse : {e}\n{resultat.stdout}")
         # Supprimer le contenu du prompteur Q si la réponse s'est bien déroulée
@@ -222,7 +233,7 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     else:
         champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
 
-def soumettreQuestionAPI(champ_q, champ_r):
+def soumettreQuestionAPI(champ_q, champ_r, champ_history):
     question = champ_q.get('1.0', tk.END).strip()
     champ_r.config(state="normal")
     champ_r.delete('1.0', tk.END)
@@ -235,8 +246,32 @@ def soumettreQuestionAPI(champ_q, champ_r):
     prompt_concatene = generer_prompt(question, profil)
     requete_curl = preparer_requete_curl(prompt_concatene)
     requete_curl = corriger_commande_curl(requete_curl)
+
+    # Initialisation de l'historique
+    historique = champ_history.get('1.0', tk.END).strip()
+
+    # Préfixer la question avec l'historique si activé
+    if profilAPIActuel.get('history', False) and historique:
+        question = f"{historique}\n{question}"
+
+    # Afficher le prompt final enrichi dans le champ R
+    champ_r.insert(tk.END, f"Prompt final envoyé :\n{question}\n\n")
+
+    # Exécuter la commande curl et afficher le résultat
     resultat = executer_commande_curl(requete_curl)
     afficher_resultat(resultat, requete_curl, champ_r, champ_q)
+
+    # Mettre à jour l'historique avec la nouvelle réponse
+    if resultat.returncode == 0:
+        try:
+            reponse_json = json.loads(resultat.stdout)
+            texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+            nouveau_historique = f"Précédemment : {texte_cible}"
+            champ_history.delete('1.0', tk.END)
+            champ_history.insert(tk.END, f"{historique}\n{nouveau_historique}".strip())
+        except Exception as e:
+            champ_r.insert(tk.END, f"Erreur lors de la mise à jour de l'historique : {e}\n")
+
     champ_r.config(state="disabled")
 
 def ouvrir_fenetre_apitest():
@@ -286,8 +321,14 @@ def ouvrir_fenetre_apitest():
     champ_r = scrolledtext.ScrolledText(fenetre, width=80, height=10, state="normal")
     champ_r.pack(padx=10, pady=5)
 
+    # Champ Historique
+    label_history = ttk.Label(fenetre, text="Historique :")
+    label_history.pack(anchor="w", padx=10)
+    champ_history = scrolledtext.ScrolledText(fenetre, width=80, height=5)
+    champ_history.pack(padx=10, pady=5)
+
     # 4. Bouton Valider (soumission)
-    bouton_valider = ttk.Button(fenetre, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r))
+    bouton_valider = ttk.Button(fenetre, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
     bouton_valider.pack(pady=10)
 
     # 5. (Optionnel) Navigation interne (Retour/Avant)
