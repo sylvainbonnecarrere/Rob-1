@@ -336,6 +336,9 @@ def ouvrir_fenetre_apitest():
     bouton_valider = ttk.Button(fenetre, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
     bouton_valider.pack(pady=10)
 
+    # Associer la touche Entrée au bouton Valider dans la fenêtre Test API
+    fenetre.bind('<Return>', lambda event: bouton_valider.invoke())
+
     # 5. (Optionnel) Navigation interne (Retour/Avant)
     # À implémenter si historique souhaité
 
