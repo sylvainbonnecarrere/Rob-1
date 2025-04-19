@@ -275,6 +275,7 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history):
 
     champ_r.config(state="disabled")
 
+# Modification pour rendre le champ historique caché tout en conservant sa fonctionnalité
 def ouvrir_fenetre_apitest():
     """
     Ouvre la fenêtre unique du module APItest avec navigation interne, chargement du profil par défaut,
@@ -322,11 +323,14 @@ def ouvrir_fenetre_apitest():
     champ_r = scrolledtext.ScrolledText(fenetre, width=80, height=10, state="normal")
     champ_r.pack(padx=10, pady=5)
 
-    # Champ Historique
-    label_history = ttk.Label(fenetre, text="Historique :")
-    label_history.pack(anchor="w", padx=10)
+    # Champ Historique (caché)
     champ_history = scrolledtext.ScrolledText(fenetre, width=80, height=5)
-    champ_history.pack(padx=10, pady=5)
+    champ_history.pack_forget()  # Rendre le champ invisible
+
+    # Bouton grisé pour indiquer si l'historique est activé
+    historique_active = profilAPIActuel.get('history', False)
+    bouton_historique = ttk.Button(fenetre, text=f"Historique activé : {historique_active}", state="disabled")
+    bouton_historique.pack(pady=5)
 
     # 4. Bouton Valider (soumission)
     bouton_valider = ttk.Button(fenetre, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
