@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, Toplevel, Menu
+from tkinter import ttk, messagebox, scrolledtext, Toplevel, Menu, PhotoImage
 import os
 import sys
 import yaml
@@ -352,6 +352,15 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history):
     champ_r.config(state="disabled")
 
 # Modification pour rendre le champ historique caché tout en conservant sa fonctionnalité
+def copier_au_presse_papier(champ_r):
+    """Copie le contenu du champ R dans le presse-papier et remet le focus sur le champ R."""
+    contenu = champ_r.get('1.0', tk.END).strip()
+    if contenu:
+        root.clipboard_clear()
+        root.clipboard_append(contenu)
+        root.update()  # Met à jour le presse-papier
+    champ_r.focus_set()  # Remet le focus sur le champ R
+
 def ouvrir_fenetre_apitest():
     """
     Ouvre la fenêtre unique du module APItest avec navigation interne, chargement du profil par défaut,
@@ -403,14 +412,20 @@ def ouvrir_fenetre_apitest():
     champ_history = scrolledtext.ScrolledText(fenetre, width=80, height=5)
     champ_history.pack_forget()  # Rendre le champ invisible
 
+    # Boutons sur la même ligne
+    frame_boutons = ttk.Frame(fenetre)
+    frame_boutons.pack(pady=5)
+
+    bouton_copier = ttk.Button(frame_boutons, text="Copier", command=lambda: copier_au_presse_papier(champ_r))
+    bouton_copier.pack(side="left", padx=5)
+
+    bouton_valider = ttk.Button(frame_boutons, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
+    bouton_valider.pack(side="left", padx=5)
+
     # Bouton grisé pour indiquer si l'historique est activé
     historique_active = profilAPIActuel.get('history', False)
     bouton_historique = ttk.Button(fenetre, text=f"Historique activé : {historique_active}", state="disabled")
     bouton_historique.pack(pady=5)
-
-    # 4. Bouton Valider (soumission)
-    bouton_valider = ttk.Button(fenetre, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
-    bouton_valider.pack(pady=10)
 
     # Associer la touche Entrée au bouton Valider dans la fenêtre Test API
     fenetre.bind('<Return>', lambda event: bouton_valider.invoke())

@@ -1,4 +1,4 @@
-api_key: 
+api_key: AIzaSyAI56WaXrkK1iFHNxp3_akHMFTN5-kabBk
 api_url: Explain how AI works
 behavior: "excit\xE9, ronchon, repond en une phrase ou deux"
 curl_exe: "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY\"\
