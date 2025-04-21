@@ -195,9 +195,24 @@ def generer_prompt(question, profil):
 def executer_commande_curl(requete_curl):
     """
     Exécute la commande curl et retourne le résultat.
+    Logue la commande et le résultat dans un fichier debug_curl.log.
     """
-    # Forcer l'encodage UTF-8 dans subprocess.run
+    # Nettoyer et normaliser la commande curl_exe
+    requete_curl = requete_curl.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+
+    # Loguer la commande dans debug_curl.log
+    with open("debug_curl.log", "a", encoding="utf-8") as log_file:
+        log_file.write(f"\n--- Commande exécutée ---\n{requete_curl}\n")
+
+    # Exécuter la commande
     resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True, encoding='utf-8')
+
+    # Loguer le résultat dans debug_curl.log
+    with open("debug_curl.log", "a", encoding="utf-8") as log_file:
+        log_file.write(f"--- Résultat ---\nCode de retour : {resultat.returncode}\n")
+        log_file.write(f"Sortie standard : {resultat.stdout}\n")
+        log_file.write(f"Sortie erreur : {resultat.stderr}\n")
+
     return resultat
 
 # Plan de tests pour les logs en console
@@ -213,24 +228,36 @@ def executer_commande_curl(requete_curl):
 def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     """
     Affiche le résultat de la commande curl dans le champ R.
+    Gère les erreurs et affiche des messages clairs en cas de problème.
     """
     champ_r.delete('1.0', tk.END)  # Nettoyer le champ avant d'afficher le résultat
 
     if resultat.returncode == 0:
         try:
             reponse_json = json.loads(resultat.stdout)
-            # Extraire le texte cible : candidates[0].content.parts[0].text
-            texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
 
-            # Corriger l'encodage du texte avant de l'afficher dans le champ R
-            texte_cible_corrige = texte_cible.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+            # Vérifier si la réponse contient des erreurs
+            if "error" in reponse_json:
+                erreur_message = reponse_json["error"].get("message", "Erreur inconnue")
+                champ_r.insert(tk.END, f"Erreur API : {erreur_message}\n")
+                return
 
-            # Afficher le texte corrigé dans le champ R
-            champ_r.insert(tk.END, texte_cible_corrige)
+            # Extraire le texte cible si disponible
+            if "candidates" in reponse_json:
+                texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+
+                # Corriger l'encodage du texte avant de l'afficher dans le champ R
+                texte_cible_corrige = texte_cible.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+
+                # Afficher le texte corrigé dans le champ R
+                champ_r.insert(tk.END, texte_cible_corrige)
+
+                # Supprimer le contenu du prompteur Q si la réponse s'est bien déroulée
+                champ_q.delete('1.0', tk.END)
+            else:
+                champ_r.insert(tk.END, "La réponse ne contient pas de candidats valides.\n")
         except Exception as e:
             champ_r.insert(tk.END, f"Erreur lors de l'analyse de la réponse : {e}\n{resultat.stdout}")
-        # Supprimer le contenu du prompteur Q si la réponse s'est bien déroulée
-        champ_q.delete('1.0', tk.END)
     else:
         champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
 

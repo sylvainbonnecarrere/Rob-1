@@ -4,5 +4,5 @@ behavior: comportement initial
 curl_exe: ''
 default: false
 history: false
+replace_apikey: ''
 role: ''
-replace_apikey: ""
