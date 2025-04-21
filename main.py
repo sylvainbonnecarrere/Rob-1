@@ -4,11 +4,14 @@ import yaml
 import subprocess
 from gui import creer_interface
 
-# Configure logging
+# Modification de la configuration des logs pour inclure la console
 logging.basicConfig(
-    filename="application.log",
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("application.log"),
+        logging.StreamHandler()  # Ajout d'un gestionnaire pour afficher les logs dans la console
+    ]
 )
 
 PROFILES_DIR = "profiles"
@@ -136,11 +139,20 @@ def execute_curl():
 def main():
     """Point d'entrée principal de l'application."""
     logging.info("Application démarrée.")
+    # Ajout d'un log pour indiquer le lancement initial de l'application
+    logging.info("Lancement initial de l'application.")
     try:
         creer_interface()
     except Exception as e:
         logging.error(f"Erreur lors de l'exécution de l'interface : {e}")
         raise
+    finally:
+        logging.info("Application terminée.")
 
 if __name__ == "__main__":
-    main()
+    logging.info("Initialisation de l'application... (Première instance)")
+    try:
+        main()
+    except Exception as e:
+        logging.critical(f"Erreur critique : {e}")
+        print("Une erreur critique est survenue. Consultez les logs pour plus de détails.")

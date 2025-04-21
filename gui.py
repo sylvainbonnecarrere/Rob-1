@@ -6,6 +6,17 @@ import yaml
 import subprocess
 import json
 import charset_normalizer
+import logging
+
+# Configure logging to log initialization events
+logging.basicConfig(
+    filename="application.log",
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+logging.info("Application started.")
+logging.info("Checking and initializing default profiles.")
 
 PROFILES_DIR = "profiles"
 os.makedirs(PROFILES_DIR, exist_ok=True)
@@ -65,7 +76,10 @@ def initialiser_profils_par_defaut():
 
 # Appeler cette fonction au démarrage si aucun fichier YAML n'est trouvé
 if not any(f.endswith(".yaml") for f in os.listdir(PROFILES_DIR)):
+    logging.info("No YAML profiles found. Initializing default profiles.")
     initialiser_profils_par_defaut()
+else:
+    logging.info("YAML profiles found. Skipping default profile initialization.")
 
 def ouvrir_fenetre_comportement():
     """Ouvre une fenêtre pour gérer les comportements."""
@@ -361,6 +375,9 @@ def copier_au_presse_papier(champ_r):
         root.update()  # Met à jour le presse-papier
     champ_r.focus_set()  # Remet le focus sur le champ R
 
+# Amélioration du design de l'interface utilisateur pour une meilleure ergonomie et lisibilité
+# Ajout de styles et réorganisation des widgets
+
 def ouvrir_fenetre_apitest():
     """
     Ouvre la fenêtre unique du module APItest avec navigation interne, chargement du profil par défaut,
@@ -369,16 +386,23 @@ def ouvrir_fenetre_apitest():
     import json
     fenetre = tk.Toplevel(root)
     fenetre.title("APItest")
-    fenetre.geometry("700x500")
+    fenetre.geometry("800x600")  # Augmentation de la taille pour plus d'espace
+
+    print("[DEBUG] Ouverture de la fenêtre APItest")
 
     def on_close():
-        root.destroy()  # Ferme toute l'application proprement
+        print("[DEBUG] Fermeture de la fenêtre APItest")
+        fenetre.destroy()
+        if not root.winfo_children():  # Si aucune autre fenêtre n'est ouverte
+            print("[DEBUG] Aucune autre fenêtre ouverte, fermeture de l'application principale")
+            root.quit()  # Quitte proprement l'application
+
     fenetre.protocol("WM_DELETE_WINDOW", on_close)
 
-    # 1. Chargement du profil par défaut (log affiché une seule fois)
+    # Chargement du profil par défaut
     nom_profil_charge, profilAPIActuel = selectionProfilDefaut()
 
-    # 2. Création de la commande API (champ caché)
+    # Création de la commande API (champ caché)
     def creerCommandeAPI(profil):
         if not profil:
             return ""
@@ -391,47 +415,48 @@ def ouvrir_fenetre_apitest():
     cmd_api = creerCommandeAPI(profilAPIActuel)
     fenetre.cmd_api = cmd_api  # champ caché
 
-    # 3. Interface utilisateur
+    # Interface utilisateur
+    # Ajout d'un cadre principal pour organiser les widgets
+    cadre_principal = ttk.Frame(fenetre, padding="10")
+    cadre_principal.pack(fill="both", expand=True)
+
     # Afficher le nom du profil API par défaut ou le préfixe du fichier
-    label_profil = ttk.Label(fenetre, text=f"Profil : {nom_profil_charge.split('.')[0]}")
-    label_profil.pack(pady=5)
+    label_profil = ttk.Label(cadre_principal, text=f"Profil chargé : {nom_profil_charge.split('.')[0]}", font=("Arial", 12, "bold"))
+    label_profil.pack(pady=10)
 
     # Champ Q (question)
-    label_q = ttk.Label(fenetre, text="Q :")
-    label_q.pack(anchor="w", padx=10)
-    champ_q = scrolledtext.ScrolledText(fenetre, width=80, height=5)
-    champ_q.pack(padx=10, pady=5)
+    label_q = ttk.Label(cadre_principal, text="Question (Q) :", font=("Arial", 10))
+    label_q.pack(anchor="w", pady=5)
+    champ_q = scrolledtext.ScrolledText(cadre_principal, width=90, height=5, wrap="word", font=("Arial", 10))
+    champ_q.pack(pady=5)
 
     # Champ R (réponse)
-    label_r = ttk.Label(fenetre, text="R :")
-    label_r.pack(anchor="w", padx=10)
-    champ_r = scrolledtext.ScrolledText(fenetre, width=80, height=10, state="normal")
-    champ_r.pack(padx=10, pady=5)
+    label_r = ttk.Label(cadre_principal, text="Réponse (R) :", font=("Arial", 10))
+    label_r.pack(anchor="w", pady=5)
+    champ_r = scrolledtext.ScrolledText(cadre_principal, width=90, height=10, wrap="word", font=("Arial", 10), state="normal")
+    champ_r.pack(pady=5)
 
     # Champ Historique (caché)
-    champ_history = scrolledtext.ScrolledText(fenetre, width=80, height=5)
+    champ_history = scrolledtext.ScrolledText(cadre_principal, width=90, height=5, wrap="word", font=("Arial", 10))
     champ_history.pack_forget()  # Rendre le champ invisible
 
-    # Boutons sur la même ligne
-    frame_boutons = ttk.Frame(fenetre)
-    frame_boutons.pack(pady=5)
+    # Boutons sur une ligne horizontale
+    frame_boutons = ttk.Frame(cadre_principal)
+    frame_boutons.pack(pady=10)
 
-    bouton_copier = ttk.Button(frame_boutons, text="Copier", command=lambda: copier_au_presse_papier(champ_r))
-    bouton_copier.pack(side="left", padx=5)
+    bouton_copier = ttk.Button(frame_boutons, text="Copier la réponse", command=lambda: copier_au_presse_papier(champ_r))
+    bouton_copier.pack(side="left", padx=10)
 
-    bouton_valider = ttk.Button(frame_boutons, text="Valider", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
-    bouton_valider.pack(side="left", padx=5)
+    bouton_valider = ttk.Button(frame_boutons, text="Envoyer la question", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
+    bouton_valider.pack(side="left", padx=10)
 
     # Bouton grisé pour indiquer si l'historique est activé
     historique_active = profilAPIActuel.get('history', False)
-    bouton_historique = ttk.Button(fenetre, text=f"Historique activé : {historique_active}", state="disabled")
+    bouton_historique = ttk.Button(cadre_principal, text=f"Historique activé : {historique_active}", state="disabled")
     bouton_historique.pack(pady=5)
 
     # Associer la touche Entrée au bouton Valider dans la fenêtre Test API
     fenetre.bind('<Return>', lambda event: bouton_valider.invoke())
-
-    # 5. (Optionnel) Navigation interne (Retour/Avant)
-    # À implémenter si historique souhaité
 
 def open_setup_menu():
     setup_window = tk.Toplevel(root)
@@ -634,7 +659,24 @@ def creer_interface():
     resultats_text.tag_config('reussi', foreground='green')
     resultats_text.tag_config('erreur', foreground='red')
 
+    logging.info("GUI application setup complete.")
+
     root.mainloop()
 
-# Appel de la fonction au démarrage de l'application
-creer_interface()
+# Add a simple window setup that closes completely without reopening
+def main():
+    root = tk.Tk()
+    root.title("Simple Window")
+
+    # Add a label to the window
+    label = ttk.Label(root, text="Welcome to the Simple Window")
+    label.pack(pady=20)
+
+    # Add a button to close the application
+    close_button = ttk.Button(root, text="Close", command=root.destroy)
+    close_button.pack(pady=10)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
