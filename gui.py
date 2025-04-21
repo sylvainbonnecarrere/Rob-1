@@ -127,10 +127,11 @@ def preparer_requete_curl(final_prompt):
     """
     curl_exe = profilAPIActuel.get('curl_exe', '')
     api_key = profilAPIActuel.get('api_key', '')
+    replace_apikey = profilAPIActuel.get('replace_apikey', '')
 
-    # Si le profil est Gemini, remplacer GEMINI_API_KEY par api_key
-    if 'GEMINI_API_KEY' in curl_exe:
-        curl_exe = curl_exe.replace('GEMINI_API_KEY', api_key)
+    # Remplacer la variable définie dans replace_apikey par la clé API si elle est spécifiée
+    if replace_apikey and replace_apikey in curl_exe:
+        curl_exe = curl_exe.replace(replace_apikey, api_key)
 
     # Remplacer uniquement la chaîne de caractère api_url par final_prompt
     api_url = profilAPIActuel.get('api_url', '')
@@ -376,6 +377,7 @@ def open_setup_menu():
         history_checkbutton_var.set(donnees_profil.get("history", False))
         default_profile_var.set(donnees_profil.get("default", False))
         curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+        replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
 
     # Fonction pour définir un seul profil comme défaut
     def definir_profil_defaut(profil_selectionne):
@@ -431,8 +433,8 @@ def open_setup_menu():
     default_behavior_entry = ttk.Entry(setup_window, textvariable=default_behavior_var)
     default_behavior_entry.grid(row=2, column=1, columnspan=2, sticky="ew", pady=5)
 
-    # URL de l'API
-    api_url_label = ttk.Label(setup_window, text="URL de l'API :")
+    # Texte à remplacer
+    api_url_label = ttk.Label(setup_window, text="Texte à remplacer :")
     api_url_label.grid(row=3, column=0, sticky="w", pady=5)
     api_url_var = tk.StringVar(value="")
     api_url_entry = ttk.Entry(setup_window, textvariable=api_url_var, width=50)
@@ -455,8 +457,15 @@ def open_setup_menu():
     default_profile_checkbutton = ttk.Checkbutton(setup_window, text="Défaut", variable=default_profile_var)
     default_profile_checkbutton.grid(row=6, column=0, columnspan=2, sticky="w", pady=5)
 
-    # Champ curl_exe
-    curl_exe_label = ttk.Label(setup_window, text="curl_exe :")
+    # Champ replace_apikey
+    replace_apikey_label = ttk.Label(setup_window, text="Remplacer API Key :")
+    replace_apikey_label.grid(row=7, column=0, sticky="w", pady=5)
+    replace_apikey_var = tk.StringVar(value="")
+    replace_apikey_entry = ttk.Entry(setup_window, textvariable=replace_apikey_var)
+    replace_apikey_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=5)
+
+    # Commande curl
+    curl_exe_label = ttk.Label(setup_window, text="Commande curl :")
     curl_exe_label.grid(row=8, column=0, sticky="w", pady=5)
     curl_exe_var = tk.StringVar(value="")
     curl_exe_entry = ttk.Entry(setup_window, textvariable=curl_exe_var, width=50)
@@ -473,6 +482,7 @@ def open_setup_menu():
         history_checkbutton_var.set(donnees_profil.get("history", False))
         default_profile_var.set(donnees_profil.get("default", False))
         curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+        replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
 
     def enregistrer_configuration():
         profil_selectionne = selected_model.get()
@@ -487,7 +497,8 @@ def open_setup_menu():
             "behavior": default_behavior_var.get(),
             "history": history_checkbutton_var.get(),
             "default": default_profile_var.get(),
-            "curl_exe": curl_exe_var.get()
+            "curl_exe": curl_exe_var.get(),
+            "replace_apikey": replace_apikey_var.get()
         }
 
         chemin_fichier = os.path.join(PROFILES_DIR, f"{profil_selectionne}.yaml")

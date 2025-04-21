@@ -5,5 +5,6 @@ curl_exe: "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini
   \ \\\n-H 'Content-Type: application/json' \\\n-X POST \\\n-d '{\n  \"contents\"\
   : [{\n    \"parts\":[{\"text\": \"Explain how AI works\"}]\n    }]\n   }'"
 default: true
-history: false
+history: true
 role: alien rigolo
+replace_apikey: "GEMINI_API_KEY"

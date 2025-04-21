@@ -4,3 +4,4 @@ behavior: comportement initial
 default: false
 history: false
 model: OpenAI
+replace_apikey: ""
