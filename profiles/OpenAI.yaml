@@ -1,6 +1,6 @@
-api_key: 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
+api_key: 
 api_url: Bonjour, qui es-tu ?
-behavior: "Dou\xE9, r\xE9pond en 200 mots max."
+behavior: "vif et anxieux, r\xE9pond en 200 mots max."
 curl_exe: "curl https://api.openai.com/v1/chat/completions \\\n  -H \"Content-Type:\
   \ application/json\" \\\n  -H \"Authorization: Bearer TA_CL\xC9_API\" \\\n  -d '{\n\
   \    \"model\": \"gpt-4\",\n    \"messages\": [{\"role\": \"user\", \"content\"\
@@ -8,4 +8,4 @@ curl_exe: "curl https://api.openai.com/v1/chat/completions \\\n  -H \"Content-Ty
 default: false
 history: false
 replace_apikey: "TA_CL\xC9_API"
-role: ALIEN
+role: ALIEN assistant
