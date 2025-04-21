@@ -19,6 +19,54 @@ def get_resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+def initialiser_profils_par_defaut():
+    """
+    Initialise les fichiers de profils par défaut (Gemini, OpenAI, Claude) si aucun fichier YAML n'est trouvé.
+    Les clés API seront laissées vides.
+    """
+    profils_par_defaut = {
+        "Gemini.yaml": {
+            "api_key": "",
+            "api_url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            "behavior": "excit\xE9, ronchon, repond en une phrase ou deux",
+            "curl_exe": "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY\" \\\n  -H 'Content-Type: application/json' \\\n  -X POST \\\n  -d '{\"contents\": [{\"parts\": [{\"text\": \"Explain how AI works\"}]}]}'",
+            "default": True,
+            "history": True,
+            "role": "alien rigolo",
+            "replace_apikey": "GEMINI_API_KEY"
+        },
+        "OpenAI.yaml": {
+            "api_key": "",
+            "api_url": "https://api.openai.com/v1/completions",
+            "behavior": "comportement initial",
+            "curl_exe": "",
+            "default": False,
+            "history": False,
+            "model": "OpenAI",
+            "replace_apikey": ""
+        },
+        "Claude.yaml": {
+            "api_key": "",
+            "api_url": "https://api.anthropic.com/v1/claude",
+            "behavior": "comportement initial",
+            "curl_exe": "",
+            "default": False,
+            "history": False,
+            "role": "",
+            "replace_apikey": ""
+        }
+    }
+
+    for nom_fichier, contenu in profils_par_defaut.items():
+        chemin_fichier = os.path.join(PROFILES_DIR, nom_fichier)
+        if not os.path.exists(chemin_fichier):
+            with open(chemin_fichier, "w", encoding="utf-8") as fichier:
+                yaml.dump(contenu, fichier)
+
+# Appeler cette fonction au démarrage si aucun fichier YAML n'est trouvé
+if not any(f.endswith(".yaml") for f in os.listdir(PROFILES_DIR)):
+    initialiser_profils_par_defaut()
+
 def ouvrir_fenetre_comportement():
     """Ouvre une fenêtre pour gérer les comportements."""
     fenetre_comportement = Toplevel()
