@@ -1,4 +1,4 @@
-api_key: 
+api_key: null
 api_url: Bonjour, qui es-tu ?
 behavior: "vif et anxieux, r\xE9pond en 200 mots max."
 curl_exe: "curl https://api.openai.com/v1/chat/completions \\\n  -H \"Content-Type:\
