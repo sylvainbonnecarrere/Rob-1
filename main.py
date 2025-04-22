@@ -3,6 +3,7 @@ import os
 import yaml
 import subprocess
 from gui import creer_interface
+from gui import creer_ecran_accueil
 
 # Configure logging
 logging.basicConfig(
@@ -143,4 +144,4 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main()
+    creer_ecran_accueil()
