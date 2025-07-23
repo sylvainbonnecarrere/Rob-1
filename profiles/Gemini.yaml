@@ -1,4 +1,4 @@
-api_key: AIzaSyAGNzBUPxdini24gPF5p0CbUxQgrO0ZKLw
+api_key: 
 api_url: Explain how AI works
 behavior: analyste, force de proposition,  expert
 curl_exe: "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY\"\
