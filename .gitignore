@@ -23,8 +23,18 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Ignorer tout le dossier profiles (contient les clés API)
+# SÉCURITÉ CRITIQUE - Fichiers contenant des clés API et données sensibles
 profiles/
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+api_key.txt
+api_keys.txt
+
+# Permettre les fichiers exemple
+!.env.example
 
 # Ignorer les conversations générées
 conversations/
