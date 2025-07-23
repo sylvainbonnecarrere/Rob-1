@@ -12,6 +12,12 @@ Ce projet vise à créer un système permettant de lancer et de gérer plusieurs
 
 1.  La configuration des APIs est le préalable pour utiliser les API LLM  et l'application. Pour cela utiliser le menu Setup API
 
+2.  Utilisez les champs rôle et comportement pour créer un agent.
+  Exemples : 
+    Rôle : un professeur d'histoire de France - Comportement : rigoureux, pédagogue, cite des sources
+    Rôle : un juriste expert en droit des affaires - Comportement : précis, intéressé, méticuleux
+    Rôle : un architecte développeur d'applications - Comportement : utilise bonnes pratiques et design pattern, force de proposition 
+
 ## Lancement
 
 Exécutez le script `main.py` :
