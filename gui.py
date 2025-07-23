@@ -20,8 +20,10 @@ logging.info("Checking and initializing default profiles.")
 
 PROFILES_DIR = "profiles"
 CONVERSATIONS_DIR = "conversations"
+DEVELOPMENT_DIR = "development"
 os.makedirs(PROFILES_DIR, exist_ok=True)
 os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
+os.makedirs(DEVELOPMENT_DIR, exist_ok=True)
 
 def get_resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -255,6 +257,103 @@ def generer_prompt(question, profil):
         f"En tant que {role}, à la fois expert, pédagogue et synthétique, nous attendons de toi le comportement suivant : {behavior}. "
         f"Ma question est la suivante : {question}"
     )
+
+def generer_fichier_development(nom_fichier, extension, reponse):
+    """
+    Génère un fichier de développement avec gestion de collision avancée.
+    """
+    try:
+        # Validation des paramètres
+        if not nom_fichier.strip():
+            return False
+        
+        # Créer le nom complet du fichier
+        nom_complet = f"{nom_fichier.strip()}{extension}"
+        chemin_fichier = os.path.join(DEVELOPMENT_DIR, nom_complet)
+        
+        # Vérifier si le fichier existe déjà
+        if os.path.exists(chemin_fichier):
+            # Créer une fenêtre personnalisée pour les options
+            choix_window = tk.Toplevel()
+            choix_window.title("Fichier existant")
+            choix_window.geometry("400x200")
+            choix_window.grab_set()  # Rendre la fenêtre modale
+            choix_window.transient()
+            
+            # Centrer la fenêtre
+            choix_window.update_idletasks()
+            x = (choix_window.winfo_screenwidth() // 2) - (400 // 2)
+            y = (choix_window.winfo_screenheight() // 2) - (200 // 2)
+            choix_window.geometry(f"400x200+{x}+{y}")
+            
+            choix_utilisateur = {"action": None}
+            
+            # Message
+            label_message = ttk.Label(choix_window, 
+                                    text=f"Le fichier '{nom_complet}' existe déjà.\nQue souhaitez-vous faire ?",
+                                    font=("Arial", 10),
+                                    justify="center")
+            label_message.pack(pady=20)
+            
+            # Frame pour les boutons
+            frame_boutons = ttk.Frame(choix_window)
+            frame_boutons.pack(pady=10)
+            
+            def choisir_remplacer():
+                choix_utilisateur["action"] = "remplacer"
+                choix_window.destroy()
+            
+            def choisir_ajouter():
+                choix_utilisateur["action"] = "ajouter"
+                choix_window.destroy()
+            
+            def choisir_annuler():
+                choix_utilisateur["action"] = "annuler"
+                choix_window.destroy()
+            
+            # Boutons
+            bouton_remplacer = ttk.Button(frame_boutons, text="Remplacer", command=choisir_remplacer)
+            bouton_remplacer.pack(side="left", padx=10)
+            
+            bouton_ajouter = ttk.Button(frame_boutons, text="Ajouter à la fin", command=choisir_ajouter)
+            bouton_ajouter.pack(side="left", padx=10)
+            
+            bouton_annuler = ttk.Button(frame_boutons, text="Annuler", command=choisir_annuler)
+            bouton_annuler.pack(side="left", padx=10)
+            
+            # Attendre que l'utilisateur fasse un choix
+            choix_window.wait_window()
+            
+            # Traiter le choix
+            if choix_utilisateur["action"] == "annuler" or choix_utilisateur["action"] is None:
+                return False
+            elif choix_utilisateur["action"] == "remplacer":
+                mode_ecriture = 'w'
+            elif choix_utilisateur["action"] == "ajouter":
+                mode_ecriture = 'a'
+                # Ajouter simplement une ligne vide pour séparer le contenu
+                reponse = f"\n\n{reponse}"
+        else:
+            mode_ecriture = 'w'
+        
+        # Écrire le fichier selon le mode choisi
+        with open(chemin_fichier, mode_ecriture, encoding='utf-8') as fichier:
+            fichier.write(reponse)
+        
+        # Message de succès adapté
+        if os.path.exists(chemin_fichier) and mode_ecriture == 'a':
+            message_succes = f"Contenu ajouté avec succès à la fin du fichier '{nom_complet}'."
+        else:
+            message_succes = f"Fichier '{nom_complet}' enregistré avec succès dans le dossier development."
+        
+        logging.info(f"Fichier développement généré avec succès : {chemin_fichier} (mode: {mode_ecriture})")
+        messagebox.showinfo("Succès", message_succes)
+        return True
+        
+    except Exception as e:
+        logging.error(f"Erreur lors de la génération du fichier développement : {e}")
+        messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde : {e}")
+        return False
 
 def generer_fichier_simple(question, reponse, profil):
     """
@@ -510,6 +609,32 @@ def ouvrir_fenetre_apitest():
     champ_history = scrolledtext.ScrolledText(cadre_principal, width=90, height=5, wrap="word", font=("Arial", 10))
     champ_history.pack_forget()  # Rendre le champ invisible
 
+    # Interface développement (conditionnelle)
+    frame_dev = None
+    champ_nom_fichier = None
+    bouton_enregistrer_fichier = None
+    
+    # Vérifier si le mode développement est activé
+    file_generation_config = profilAPIActuel.get('file_generation', {})
+    generation_active = file_generation_config.get('enabled', False)
+    mode_development = file_generation_config.get('mode', 'simple') == 'development'
+    
+    if generation_active and mode_development:
+        dev_config = file_generation_config.get('dev_config', {})
+        extension_configuree = dev_config.get('extension', '.py')
+        
+        # Frame pour les contrôles développement
+        frame_dev = ttk.Frame(cadre_principal)
+        frame_dev.pack(pady=10)
+        
+        # Label et champ nom du fichier
+        ttk.Label(frame_dev, text="Nom du fichier :", font=("Arial", 10)).pack(side="left", padx=(0, 5))
+        champ_nom_fichier = ttk.Entry(frame_dev, width=30, font=("Arial", 10))
+        champ_nom_fichier.pack(side="left", padx=(0, 5))
+        
+        # Label extension
+        ttk.Label(frame_dev, text=extension_configuree, font=("Arial", 10, "bold")).pack(side="left")
+
     # Boutons sur une ligne horizontale
     frame_boutons = ttk.Frame(cadre_principal)
     frame_boutons.pack(pady=10)
@@ -519,6 +644,39 @@ def ouvrir_fenetre_apitest():
 
     bouton_valider = ttk.Button(frame_boutons, text="Envoyer la question", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
     bouton_valider.pack(side="left", padx=10)
+    
+    # Bouton enregistrer fichier (mode développement uniquement)
+    if generation_active and mode_development:
+        def validation_nom_fichier(*args):
+            """Valide le champ nom de fichier et active/désactive le bouton."""
+            if champ_nom_fichier and bouton_enregistrer_fichier:
+                nom = champ_nom_fichier.get().strip()
+                if nom:
+                    bouton_enregistrer_fichier.config(state="normal")
+                else:
+                    bouton_enregistrer_fichier.config(state="disabled")
+        
+        def enregistrer_fichier_dev():
+            """Enregistre la réponse dans un fichier de développement."""
+            if champ_nom_fichier:
+                nom_fichier = champ_nom_fichier.get().strip()
+                reponse = champ_r.get('1.0', tk.END).strip()
+                
+                if nom_fichier and reponse:
+                    dev_config = file_generation_config.get('dev_config', {})
+                    extension = dev_config.get('extension', '.py')
+                    
+                    # Enregistrer le fichier sans vider le champ nom
+                    generer_fichier_development(nom_fichier, extension, reponse)
+        
+        bouton_enregistrer_fichier = ttk.Button(frame_boutons, text="Enregistrer le fichier", 
+                                               command=enregistrer_fichier_dev, state="disabled")
+        bouton_enregistrer_fichier.pack(side="left", padx=10)
+        
+        # Lier la validation au champ nom de fichier
+        if champ_nom_fichier:
+            champ_nom_fichier.bind('<KeyRelease>', validation_nom_fichier)
+            champ_nom_fichier.bind('<FocusOut>', validation_nom_fichier)
 
     # Boutons grisés pour indiquer les options activées
     frame_options = ttk.Frame(cadre_principal)
