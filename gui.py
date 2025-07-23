@@ -19,7 +19,9 @@ logging.info("Application started.")
 logging.info("Checking and initializing default profiles.")
 
 PROFILES_DIR = "profiles"
+CONVERSATIONS_DIR = "conversations"
 os.makedirs(PROFILES_DIR, exist_ok=True)
+os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
 
 def get_resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -254,6 +256,69 @@ def generer_prompt(question, profil):
         f"Ma question est la suivante : {question}"
     )
 
+def generer_fichier_simple(question, reponse, profil):
+    """
+    Génère un fichier en mode simple selon la configuration du profil.
+    """
+    try:
+        file_generation_config = profil.get('file_generation', {})
+        
+        # Vérifier si la génération est activée et en mode simple
+        if not file_generation_config.get('enabled', False):
+            return
+        
+        if file_generation_config.get('mode', 'simple') != 'simple':
+            return
+        
+        simple_config = file_generation_config.get('simple_config', {})
+        
+        # Récupérer les options de configuration
+        include_question = simple_config.get('include_question', True)
+        include_response = simple_config.get('include_response', True)
+        base_filename = simple_config.get('base_filename', 'conversation')
+        same_file = simple_config.get('same_file', True)
+        
+        # Vérifier qu'au moins une option de contenu est activée
+        if not (include_question or include_response):
+            return
+        
+        # Préparer le contenu
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        contenu_lines = [f"=== Conversation du {timestamp} ==="]
+        
+        if include_question and question.strip():
+            contenu_lines.append(f"Question : {question}")
+        
+        if include_response and reponse.strip():
+            contenu_lines.append(f"Réponse : {reponse}")
+        
+        contenu_lines.append("=" * 50)
+        contenu_lines.append("")  # Ligne vide pour séparer les conversations
+        
+        contenu = "\n".join(contenu_lines)
+        
+        # Déterminer le nom du fichier
+        if same_file:
+            # Fichier unique
+            nom_fichier = f"{base_filename}.txt"
+        else:
+            # Fichier avec timestamp
+            timestamp_fichier = datetime.now().strftime("%Y%m%d_%H%M%S")
+            nom_fichier = f"{base_filename}_{timestamp_fichier}.txt"
+        
+        chemin_fichier = os.path.join(CONVERSATIONS_DIR, nom_fichier)
+        
+        # Écrire le fichier
+        mode = 'a' if same_file else 'w'  # Append si même fichier, Write si nouveau fichier
+        with open(chemin_fichier, mode, encoding='utf-8') as fichier:
+            fichier.write(contenu)
+        
+        logging.info(f"Fichier généré avec succès : {chemin_fichier}")
+        
+    except Exception as e:
+        logging.error(f"Erreur lors de la génération du fichier : {e}")
+
 def executer_commande_curl(requete_curl):
     """
     Exécute la commande curl et retourne le résultat.
@@ -313,6 +378,11 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
 
                 # Afficher le texte corrigé dans le champ R
                 champ_r.insert(tk.END, texte_cible_corrige)
+
+                # Génération de fichier si activée
+                question_originale = champ_q.get('1.0', tk.END).strip()
+                profil = charger_profil_api()
+                generer_fichier_simple(question_originale, texte_cible_corrige, profil)
 
                 # Supprimer le contenu du prompteur Q si la réponse s'est bien déroulée
                 champ_q.delete('1.0', tk.END)
@@ -450,10 +520,27 @@ def ouvrir_fenetre_apitest():
     bouton_valider = ttk.Button(frame_boutons, text="Envoyer la question", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
     bouton_valider.pack(side="left", padx=10)
 
-    # Bouton grisé pour indiquer si l'historique est activé
+    # Boutons grisés pour indiquer les options activées
+    frame_options = ttk.Frame(cadre_principal)
+    frame_options.pack(pady=10)
+    
+    # Bouton historique
     historique_active = profilAPIActuel.get('history', False)
-    bouton_historique = ttk.Button(cadre_principal, text=f"Historique activé : {historique_active}", state="disabled")
-    bouton_historique.pack(pady=5)
+    texte_historique = "Historique activé" if historique_active else "Historique désactivé"
+    bouton_historique = ttk.Button(frame_options, text=texte_historique, state="disabled")
+    bouton_historique.pack(side="left", padx=10)
+    
+    # Bouton génération de fichiers
+    file_generation_config = profilAPIActuel.get('file_generation', {})
+    generation_active = file_generation_config.get('enabled', False)
+    if generation_active:
+        mode_generation = file_generation_config.get('mode', 'simple')
+        texte_generation = f"Génération fichier : {mode_generation}"
+    else:
+        texte_generation = "Génération fichier : désactivée"
+    
+    bouton_generation = ttk.Button(frame_options, text=texte_generation, state="disabled")
+    bouton_generation.pack(side="left", padx=10)
 
     # Associer la touche Entrée au bouton Valider dans la fenêtre Test API
     fenetre.bind('<Return>', lambda event: bouton_valider.invoke())
@@ -638,7 +725,7 @@ def open_setup_file_menu():
     """Ouvre le formulaire de configuration de génération de fichiers."""
     setup_file_window = tk.Toplevel(root)
     setup_file_window.title("Set Up File")
-    setup_file_window.geometry("500x400")
+    setup_file_window.geometry("500x500")
     
     # Variables
     mode_var = tk.StringVar(value="simple")
@@ -674,9 +761,11 @@ def open_setup_file_menu():
     
     # Validation des champs
     def valider_formulaire():
+        # Si la génération est désactivée, la configuration est toujours valide
         if not enabled_var.get():
-            return False
+            return True
         
+        # Si la génération est activée, valider selon le mode
         if mode_var.get() == "simple":
             if not base_filename_var.get().strip():
                 return False
@@ -709,8 +798,10 @@ def open_setup_file_menu():
     main_frame = ttk.Frame(setup_file_window, padding="10")
     main_frame.pack(fill="both", expand=True)
     
-    # Titre
-    title_label = ttk.Label(main_frame, text="Configuration de Génération de Fichiers", font=("Arial", 12, "bold"))
+    # Titre avec nom de l'API par défaut
+    nom_profil_charge, _ = selectionProfilDefaut()
+    nom_api = nom_profil_charge.split('.')[0] if nom_profil_charge else "API"
+    title_label = ttk.Label(main_frame, text=f"Configuration de Génération de Fichiers avec l'API {nom_api}", font=("Arial", 12, "bold"))
     title_label.pack(pady=(0, 10))
     
     # Activation de la génération
@@ -743,16 +834,16 @@ def open_setup_file_menu():
                                               variable=include_response_var, command=update_button_state)
     include_response_checkbox.pack(anchor="w", pady=2)
     
+    same_file_checkbox = ttk.Checkbutton(frame_simple, text="Écrire dans le même fichier", 
+                                        variable=same_file_var, command=update_button_state)
+    same_file_checkbox.pack(anchor="w", pady=2)
+    
     filename_frame = ttk.Frame(frame_simple)
     filename_frame.pack(fill="x", pady=5)
     ttk.Label(filename_frame, text="Nom du fichier :").pack(side="left")
     filename_entry = ttk.Entry(filename_frame, textvariable=base_filename_var, width=20)
     filename_entry.pack(side="left", padx=(5, 0))
     filename_entry.bind('<KeyRelease>', lambda e: update_button_state())
-    
-    same_file_checkbox = ttk.Checkbutton(frame_simple, text="Écrire dans le même fichier", 
-                                        variable=same_file_var)
-    same_file_checkbox.pack(anchor="w", pady=2)
     
     # Panel Mode Développement
     frame_development = ttk.LabelFrame(main_frame, text="Configuration Mode Développement", padding="10")

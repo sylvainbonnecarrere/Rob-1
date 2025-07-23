@@ -1,0 +1,20 @@
+api_key: AIzaSyBjfuEFUTkKI1sxiTuP-Z1yhOu1pNbLRVc
+api_url: Explain how AI works
+behavior: analyste, force de proposition, godmod, répond en 3 phrases maximum
+curl_exe: "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY\"\
+  \ \\\n-H 'Content-Type: application/json' \\\n-X POST \\\n-d '{\n  \"contents\"\
+  : [{\n    \"parts\":[{\"text\": \"Explain how AI works\"}]\n    }]\n   }'"
+default: true
+file_generation:
+  dev_config:
+    extension: .py
+  enabled: true
+  mode: simple
+  simple_config:
+    base_filename: test_multifile
+    include_question: true
+    include_response: true
+    same_file: false
+history: true
+replace_apikey: GEMINI_API_KEY
+role: alien scientifique
