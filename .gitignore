@@ -23,7 +23,13 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Ignorer les fichiers de profils YAML
-profiles/Gemini.yaml
-profiles/OpenAI.yaml
-profiles/Claude.yaml
+# Ignorer tout le dossier profiles (contient les clés API)
+profiles/
+
+# Ignorer les conversations générées
+conversations/
+
+# Fichiers de debug et logs API
+debug_api.log
+debug_curl.log
+application.log

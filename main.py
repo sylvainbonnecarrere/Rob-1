@@ -15,7 +15,9 @@ logging.basicConfig(
 )
 
 PROFILES_DIR = "profiles"
+CONVERSATIONS_DIR = "conversations"
 os.makedirs(PROFILES_DIR, exist_ok=True)
+os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
 
 def creer_fichiers_configuration():
     """Crée les fichiers de configuration pour Gemini, OpenAI et Claude."""
@@ -29,7 +31,20 @@ def creer_fichiers_configuration():
             "curl_exe": "",
             "default": False,
             "history": False,
-            "role": ""
+            "role": "",
+            "file_generation": {
+                "enabled": False,
+                "mode": "simple",
+                "simple_config": {
+                    "include_question": True,
+                    "include_response": True,
+                    "base_filename": "conversation",
+                    "same_file": True
+                },
+                "dev_config": {
+                    "extension": ".py"
+                }
+            }
         },
         "OpenAI": {
             "profil": "OpenAI",
@@ -40,7 +55,20 @@ def creer_fichiers_configuration():
             "curl_exe": "",
             "default": False,
             "history": False,
-            "role": ""
+            "role": "",
+            "file_generation": {
+                "enabled": False,
+                "mode": "simple",
+                "simple_config": {
+                    "include_question": True,
+                    "include_response": True,
+                    "base_filename": "conversation",
+                    "same_file": True
+                },
+                "dev_config": {
+                    "extension": ".py"
+                }
+            }
         },
         "Claude": {
             "profil": "Claude",
@@ -51,7 +79,20 @@ def creer_fichiers_configuration():
             "curl_exe": "",
             "default": False,
             "history": False,
-            "role": ""
+            "role": "",
+            "file_generation": {
+                "enabled": False,
+                "mode": "simple",
+                "simple_config": {
+                    "include_question": True,
+                    "include_response": True,
+                    "base_filename": "conversation",
+                    "same_file": True
+                },
+                "dev_config": {
+                    "extension": ".py"
+                }
+            }
         }
     }
 

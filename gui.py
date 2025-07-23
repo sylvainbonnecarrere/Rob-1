@@ -634,6 +634,187 @@ def open_setup_menu():
     bouton_annuler = ttk.Button(setup_window, text="Annuler", command=setup_window.destroy)
     bouton_annuler.grid(row=10, column=0, columnspan=3, pady=5)
 
+def open_setup_file_menu():
+    """Ouvre le formulaire de configuration de génération de fichiers."""
+    setup_file_window = tk.Toplevel(root)
+    setup_file_window.title("Set Up File")
+    setup_file_window.geometry("500x400")
+    
+    # Variables
+    mode_var = tk.StringVar(value="simple")
+    include_question_var = tk.BooleanVar(value=True)
+    include_response_var = tk.BooleanVar(value=True)
+    base_filename_var = tk.StringVar(value="conversation")
+    same_file_var = tk.BooleanVar(value=True)
+    extension_var = tk.StringVar(value=".py")
+    enabled_var = tk.BooleanVar(value=False)
+    
+    # Extensions disponibles
+    extensions = [".py", ".js", ".html", ".css", ".txt", ".md", ".json", ".xml", ".c", ".cpp", ".java"]
+    
+    # Charger la configuration actuelle
+    def charger_config_actuelle():
+        try:
+            profil_actuel = lire_profil_defaut()
+            if profil_actuel and "file_generation" in profil_actuel:
+                config = profil_actuel["file_generation"]
+                enabled_var.set(config.get("enabled", False))
+                mode_var.set(config.get("mode", "simple"))
+                
+                simple_config = config.get("simple_config", {})
+                include_question_var.set(simple_config.get("include_question", True))
+                include_response_var.set(simple_config.get("include_response", True))
+                base_filename_var.set(simple_config.get("base_filename", "conversation"))
+                same_file_var.set(simple_config.get("same_file", True))
+                
+                dev_config = config.get("dev_config", {})
+                extension_var.set(dev_config.get("extension", ".py"))
+        except Exception as e:
+            logging.error(f"Erreur lors du chargement de la configuration : {e}")
+    
+    # Validation des champs
+    def valider_formulaire():
+        if not enabled_var.get():
+            return False
+        
+        if mode_var.get() == "simple":
+            if not base_filename_var.get().strip():
+                return False
+            if not (include_question_var.get() or include_response_var.get()):
+                return False
+        elif mode_var.get() == "development":
+            if not extension_var.get().strip():
+                return False
+        
+        return True
+    
+    # Mise à jour de l'état du bouton
+    def update_button_state():
+        if valider_formulaire():
+            bouton_enregistrer.config(state="normal")
+        else:
+            bouton_enregistrer.config(state="disabled")
+    
+    # Mise à jour des panels selon le mode
+    def update_panels():
+        if mode_var.get() == "simple":
+            frame_simple.pack(fill="x", padx=10, pady=5)
+            frame_development.pack_forget()
+        else:
+            frame_simple.pack_forget()
+            frame_development.pack(fill="x", padx=10, pady=5)
+        update_button_state()
+    
+    # Interface principale
+    main_frame = ttk.Frame(setup_file_window, padding="10")
+    main_frame.pack(fill="both", expand=True)
+    
+    # Titre
+    title_label = ttk.Label(main_frame, text="Configuration de Génération de Fichiers", font=("Arial", 12, "bold"))
+    title_label.pack(pady=(0, 10))
+    
+    # Activation de la génération
+    enabled_frame = ttk.Frame(main_frame)
+    enabled_frame.pack(fill="x", pady=5)
+    enabled_checkbox = ttk.Checkbutton(enabled_frame, text="Activer la génération de fichiers", 
+                                      variable=enabled_var, command=update_button_state)
+    enabled_checkbox.pack(anchor="w")
+    
+    # Choix du mode
+    mode_frame = ttk.LabelFrame(main_frame, text="Mode d'utilisation", padding="10")
+    mode_frame.pack(fill="x", pady=10)
+    
+    mode_simple_radio = ttk.Radiobutton(mode_frame, text="Mode Simple (Conservation)", 
+                                       variable=mode_var, value="simple", command=update_panels)
+    mode_simple_radio.pack(anchor="w", pady=2)
+    
+    mode_dev_radio = ttk.Radiobutton(mode_frame, text="Mode Développement (Code)", 
+                                    variable=mode_var, value="development", command=update_panels)
+    mode_dev_radio.pack(anchor="w", pady=2)
+    
+    # Panel Mode Simple
+    frame_simple = ttk.LabelFrame(main_frame, text="Configuration Mode Simple", padding="10")
+    
+    include_question_checkbox = ttk.Checkbutton(frame_simple, text="Intégrer la question", 
+                                               variable=include_question_var, command=update_button_state)
+    include_question_checkbox.pack(anchor="w", pady=2)
+    
+    include_response_checkbox = ttk.Checkbutton(frame_simple, text="Intégrer la réponse", 
+                                              variable=include_response_var, command=update_button_state)
+    include_response_checkbox.pack(anchor="w", pady=2)
+    
+    filename_frame = ttk.Frame(frame_simple)
+    filename_frame.pack(fill="x", pady=5)
+    ttk.Label(filename_frame, text="Nom du fichier :").pack(side="left")
+    filename_entry = ttk.Entry(filename_frame, textvariable=base_filename_var, width=20)
+    filename_entry.pack(side="left", padx=(5, 0))
+    filename_entry.bind('<KeyRelease>', lambda e: update_button_state())
+    
+    same_file_checkbox = ttk.Checkbutton(frame_simple, text="Écrire dans le même fichier", 
+                                        variable=same_file_var)
+    same_file_checkbox.pack(anchor="w", pady=2)
+    
+    # Panel Mode Développement
+    frame_development = ttk.LabelFrame(main_frame, text="Configuration Mode Développement", padding="10")
+    
+    extension_frame = ttk.Frame(frame_development)
+    extension_frame.pack(fill="x", pady=5)
+    ttk.Label(extension_frame, text="Extension :").pack(side="left")
+    extension_combo = ttk.Combobox(extension_frame, textvariable=extension_var, values=extensions, width=15)
+    extension_combo.pack(side="left", padx=(5, 0))
+    extension_combo.bind('<<ComboboxSelected>>', lambda e: update_button_state())
+    extension_combo.bind('<KeyRelease>', lambda e: update_button_state())
+    
+    # Bouton Enregistrer - créé ici pour être accessible aux fonctions
+    button_frame = ttk.Frame(main_frame)
+    button_frame.pack(fill="x", pady=20)
+    
+    def enregistrer_config():
+        try:
+            # Charger le profil actuel
+            nom_profil_charge, profil_actuel = selectionProfilDefaut()
+            
+            if not profil_actuel:
+                messagebox.showerror("Erreur", "Impossible de charger le profil actuel.")
+                return
+            
+            # Mise à jour de la configuration
+            profil_actuel["file_generation"] = {
+                "enabled": enabled_var.get(),
+                "mode": mode_var.get(),
+                "simple_config": {
+                    "include_question": include_question_var.get(),
+                    "include_response": include_response_var.get(),
+                    "base_filename": base_filename_var.get().strip(),
+                    "same_file": same_file_var.get()
+                },
+                "dev_config": {
+                    "extension": extension_var.get().strip()
+                }
+            }
+            
+            # Sauvegarder dans le fichier
+            nom_fichier = nom_profil_charge.replace('.yaml', '') if nom_profil_charge else 'Gemini'
+            chemin_fichier = os.path.join(PROFILES_DIR, f"{nom_fichier}.yaml")
+            
+            with open(chemin_fichier, 'w', encoding="utf-8") as fichier:
+                yaml.dump(profil_actuel, fichier, default_flow_style=False, allow_unicode=True)
+            
+            messagebox.showinfo("Succès", f"Configuration sauvegardée dans {nom_fichier}")
+            setup_file_window.destroy()
+            
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde : {e}")
+            logging.error(f"Erreur sauvegarde config file : {e}")
+    
+    bouton_enregistrer = ttk.Button(button_frame, text="Enregistrer", command=enregistrer_config, state="disabled")
+    bouton_enregistrer.pack(anchor="center")
+    
+    # Initialisation
+    charger_config_actuelle()
+    update_panels()
+    update_button_state()
+
 def creer_interface():
     """Crée l'interface graphique principale avec une barre de menu."""
     global root
@@ -647,6 +828,7 @@ def creer_interface():
     menu_api = Menu(menu_bar, tearoff=0)
     menu_api.add_command(label="Test API", command=ouvrir_fenetre_apitest)
     menu_api.add_command(label="Set up API", command=open_setup_menu)
+    menu_api.add_command(label="Set up File", command=open_setup_file_menu)
     menu_bar.add_cascade(label="API", menu=menu_api)
 
     # Configuration de la barre de menu
