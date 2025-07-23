@@ -6,10 +6,11 @@ Ce projet vise à créer un système permettant de lancer et de gérer plusieurs
 
 * Python 3.x
 * Librairies : `PyYAML`, `Flask` (installer avec `pip install pyyaml flask`)
+* En principe, si vous avez cette version de Python les dépendances s'installeront automatiquement.
 
 ## Configuration
 
-1.  Créez ou modifiez le fichier `config.yaml` pour définir vos agents et leurs configurations.
+1.  La configuration des APIs est le préalable pour utiliser les API LLM  et l'application. Pour cela utiliser le menu Setup API
 
 ## Lancement
 
