@@ -1,0 +1,476 @@
+os_name:
+  label: Nom Os
+  value: Windows
+os_version:
+  label: Version Os
+  value: '10'
+python_version:
+  label: Version Python
+  value: 3.13.0
+architecture:
+  label: Architecture
+  value: AMD64
+cpu_cores:
+  label: Nombre de coeurs CPU
+  value: 8
+total_memory_gb:
+  label: Mémoire totale (Go)
+  value: 31.94
+disk_free_gb:
+  label: Espace disque libre (Go) - Application
+  value: 347.8
+app_directory:
+  label: Chemin de l'application
+  value: C:\AITest\Rob-1
+script_path:
+  label: Chemin du script
+  value: C:\AITest\Rob-1\main.py
+directory_tree:
+  label: Arborescence de l'application
+  value:
+    .:
+      directories:
+      - .git
+      - images
+      - profiles
+      - __pycache__
+      files:
+      - .env
+      - .gitignore
+      - agents.py
+      - api.py
+      - api_key.txt
+      - application.log
+      - config.yaml
+      - debug_curl.log
+      - gui.py
+      - Install.md
+      - main.py
+      - README.md
+      - requirements.txt
+      - setup.py
+      - test_agents.py
+    .git:
+      directories:
+      - hooks
+      - info
+      - logs
+      - objects
+      - refs
+      files:
+      - COMMIT_EDITMSG
+      - config
+      - description
+      - FETCH_HEAD
+      - HEAD
+      - index
+      - ORIG_HEAD
+      - packed-refs
+    .git\hooks:
+      directories: []
+      files:
+      - applypatch-msg.sample
+      - commit-msg.sample
+      - fsmonitor-watchman.sample
+      - post-update.sample
+      - pre-applypatch.sample
+      - pre-commit.sample
+      - pre-merge-commit.sample
+      - pre-push.sample
+      - pre-rebase.sample
+      - pre-receive.sample
+      - prepare-commit-msg.sample
+      - push-to-checkout.sample
+      - sendemail-validate.sample
+      - update.sample
+    .git\info:
+      directories: []
+      files:
+      - exclude
+    .git\logs:
+      directories:
+      - refs
+      files:
+      - HEAD
+    .git\logs\refs:
+      directories:
+      - heads
+      - remotes
+      files: []
+    .git\logs\refs\heads:
+      directories: []
+      files:
+      - main
+      - master
+    .git\logs\refs\remotes:
+      directories:
+      - origin
+      files: []
+    .git\logs\refs\remotes\origin:
+      directories: []
+      files:
+      - HEAD
+      - main
+    .git\objects:
+      directories:
+      - 0b
+      - 0c
+      - 0e
+      - '10'
+      - '11'
+      - '18'
+      - '21'
+      - '23'
+      - '24'
+      - '26'
+      - 2b
+      - 2d
+      - '34'
+      - '38'
+      - '39'
+      - 3b
+      - 3c
+      - '49'
+      - 4a
+      - '52'
+      - '55'
+      - '57'
+      - 5d
+      - '60'
+      - 6f
+      - '70'
+      - '73'
+      - '74'
+      - '78'
+      - '80'
+      - '81'
+      - '90'
+      - '93'
+      - '94'
+      - '96'
+      - a1
+      - a3
+      - a4
+      - ab
+      - b1
+      - c5
+      - c8
+      - cc
+      - d1
+      - d3
+      - d4
+      - d6
+      - da
+      - db
+      - dc
+      - e0
+      - e2
+      - e3
+      - e7
+      - e8
+      - eb
+      - ed
+      - f1
+      - f3
+      - f7
+      - info
+      - pack
+      files: []
+    .git\objects\0b:
+      directories: []
+      files:
+      - 0b5ea08daeef9dc3dabb0e3ed7c4d62d64ee66
+    .git\objects\0c:
+      directories: []
+      files:
+      - ee795fae6269e9ed128d195c9dd4a9530173b2
+    .git\objects\0e:
+      directories: []
+      files:
+      - 7033acfc28710cd0e14b03fb11460dfa02bbc0
+    .git\objects\10:
+      directories: []
+      files:
+      - 3aaac0b522689588289c49f1e618d5a9786968
+    .git\objects\11:
+      directories: []
+      files:
+      - 0289143d3408ceabf3ae01de47d7bd2c122fa4
+      - 61f85d6850b8fa4c36b1c93f078e304a8273bb
+    .git\objects\18:
+      directories: []
+      files:
+      - 921fc6188019c5c14a6b7ee69f8f238b4b464f
+    .git\objects\21:
+      directories: []
+      files:
+      - 585790fe031a4eecd38c4a22f79ab5c1c98db2
+    .git\objects\23:
+      directories: []
+      files:
+      - d8bf853c8d82f72376a273add18a8482c5095d
+    .git\objects\24:
+      directories: []
+      files:
+      - 208880e721c7aaa1ca066757f3e0ed82810059
+    .git\objects\26:
+      directories: []
+      files:
+      - f8ff3a1b446def1397726a8dbdb1762f0a8990
+    .git\objects\2b:
+      directories: []
+      files:
+      - 1bc5458d4690aba6beec3cf307a1b872c81af3
+      - 957c6c03e26e59f6a112ddd19ce5d89a490263
+    .git\objects\2d:
+      directories: []
+      files:
+      - 6a314a36a410559f21ccd8875ca52c6c6a5aa3
+    .git\objects\34:
+      directories: []
+      files:
+      - 1484ff99c78c55401a8a7682047614c2d6169f
+    .git\objects\38:
+      directories: []
+      files:
+      - 39d06a3072219dfa8ba92109fba332f54bc37b
+    .git\objects\39:
+      directories: []
+      files:
+      - aef1a8324c1ffd69cc98538e804acaa22324c6
+      - f27b8af8cecbaa494a03a4a56d35a62c8e0adb
+    .git\objects\3b:
+      directories: []
+      files:
+      - af809ca52d42cb97461c65f49b80663c63f722
+    .git\objects\3c:
+      directories: []
+      files:
+      - b491d1be47264ab9b56b52f7f72f52449bd6e9
+    .git\objects\49:
+      directories: []
+      files:
+      - a681ec24fc4fc3bfc64b40cb72c3a37beafb0d
+    .git\objects\4a:
+      directories: []
+      files:
+      - 56265acf522e781a9645a8ae632acd0b8c7a91
+    .git\objects\52:
+      directories: []
+      files:
+      - be065051495a8b975a920790288edf6cb57ee8
+    .git\objects\55:
+      directories: []
+      files:
+      - 8842a9cf4afb6dc768e454abba2db7cb8ebd07
+    .git\objects\57:
+      directories: []
+      files:
+      - f17ca27359baef5a9378332b996529b4a5e3d9
+    .git\objects\5d:
+      directories: []
+      files:
+      - 5693afb89e8d9c148bc67ef5d7062d5784b13d
+    .git\objects\60:
+      directories: []
+      files:
+      - c956bb47dcec1705cbb21913abb9af71f34dee
+    .git\objects\6f:
+      directories: []
+      files:
+      - 9bc49efda03ce89e85db85f8e24534209dd29a
+    .git\objects\70:
+      directories: []
+      files:
+      - 367475291d1390eef65625a184a74061276553
+    .git\objects\73:
+      directories: []
+      files:
+      - eefd11177d51cecafcd4aca4e3f6cd68c4c9f2
+    .git\objects\74:
+      directories: []
+      files:
+      - 6faac35111e34017b5ad58e17c112faba9280d
+    .git\objects\78:
+      directories: []
+      files:
+      - 8390535d58d0e33b80191ca93330fe360ec32d
+      - d58c15abb7d800be814188494f78be5a4577da
+    .git\objects\80:
+      directories: []
+      files:
+      - dfaecf27174b5f553193763959be5a9bd1c8d3
+    .git\objects\81:
+      directories: []
+      files:
+      - ca57dcb95a4a47d9cdc2ad0cb6d59ca71bd556
+    .git\objects\90:
+      directories: []
+      files:
+      - a0a7b01281155c421c08267e83b2ca41c0560d
+    .git\objects\93:
+      directories: []
+      files:
+      - ead222408e5decfe080e77ab889db6681253b2
+    .git\objects\94:
+      directories: []
+      files:
+      - 9b12bc5f44b1d5dc3684642770b87399c567d3
+    .git\objects\96:
+      directories: []
+      files:
+      - 39b8ce8d738fbbb353046fdfc059c58b33c2d6
+    .git\objects\a1:
+      directories: []
+      files:
+      - f25cf3d996ca6ccc4846b1b4c55ba8d434284c
+    .git\objects\a3:
+      directories: []
+      files:
+      - 3c516eda5c204979a237fda4ed09d49c660c46
+    .git\objects\a4:
+      directories: []
+      files:
+      - 6fd189cb2ea3c38f9113e5e9ecc8c5bc6737ec
+      - ee6d35d69bcd3c894070c1a0d87894ff62a1fe
+    .git\objects\ab:
+      directories: []
+      files:
+      - b0dc79954c595f9ee4759ba929188d25fe3f6c
+    .git\objects\b1:
+      directories: []
+      files:
+      - 053f3dd023848d5ced7b8207b24e1c84ac5481
+      - e4e1041ee6d4714d3e3ad5af53bb98b8c8e4a9
+    .git\objects\c5:
+      directories: []
+      files:
+      - 92edd619a037ae3ff7eb79a3847a2cdabce719
+    .git\objects\c8:
+      directories: []
+      files:
+      - 03ec95b1e30379460e3834a3069f5aa00de0e0
+    .git\objects\cc:
+      directories: []
+      files:
+      - a440a9b7ca13adc2290925cfe8e2b56d4bd4c6
+    .git\objects\d1:
+      directories: []
+      files:
+      - d8037c91a1db58bbc48db76cef108807a7c3dd
+      - db126cc591b17a54c0b4d6991a2c831e79e5c3
+    .git\objects\d3:
+      directories: []
+      files:
+      - 4c266f216d30edee624f934255121c20afd5b1
+    .git\objects\d4:
+      directories: []
+      files:
+      - a803232bc8ed6785b754cbadf6e20f37360695
+    .git\objects\d6:
+      directories: []
+      files:
+      - 9381690b60d1fa451c667e48548006c8bcb336
+    .git\objects\da:
+      directories: []
+      files:
+      - ac9cb348c3cee24443e9b1130f13322b5b8cf1
+    .git\objects\db:
+      directories: []
+      files:
+      - d6c3f4fce2c6bbab79e3b767134c0d324f1efe
+    .git\objects\dc:
+      directories: []
+      files:
+      - 69dca970a59231cb71f63ca96469c3ab08c8a4
+    .git\objects\e0:
+      directories: []
+      files:
+      - 88c5e51841b7be3ef84a16c9339aca4f4ce31c
+    .git\objects\e2:
+      directories: []
+      files:
+      - 87165cf6f2e4fb29b023c9bace73215b71af8f
+    .git\objects\e3:
+      directories: []
+      files:
+      - 28dcc8cb2ddd69682d4a2ba7f13244a073d7ae
+    .git\objects\e7:
+      directories: []
+      files:
+      - 1df6da97760a26884dcb8fc2ab936bc40d9899
+    .git\objects\e8:
+      directories: []
+      files:
+      - 60447ee1b942854599df279d35eb0610748de9
+    .git\objects\eb:
+      directories: []
+      files:
+      - ded651b25d6616063c2342b883fea033c32716
+    .git\objects\ed:
+      directories: []
+      files:
+      - d73d26e7cfdffe1ba4cf3cbc604ca89b1bf815
+    .git\objects\f1:
+      directories: []
+      files:
+      - 815ebbfb5d18279ce49c5fc95af8f9395bb6f6
+    .git\objects\f3:
+      directories: []
+      files:
+      - 8fb5e9700426b4367e35e51c3de44712a7d7a2
+    .git\objects\f7:
+      directories: []
+      files:
+      - 317a1e4e4bb2df3e9c51dcf99cc976dbe7b5f7
+    .git\objects\info:
+      directories: []
+      files: []
+    .git\objects\pack:
+      directories: []
+      files:
+      - pack-1daa166559a88ce544a8f23093a43dc8f56402e5.idx
+      - pack-1daa166559a88ce544a8f23093a43dc8f56402e5.pack
+      - pack-1daa166559a88ce544a8f23093a43dc8f56402e5.rev
+    .git\refs:
+      directories:
+      - heads
+      - remotes
+      - tags
+      files: []
+    .git\refs\heads:
+      directories: []
+      files:
+      - main
+      - master
+    .git\refs\remotes:
+      directories:
+      - origin
+      files: []
+    .git\refs\remotes\origin:
+      directories: []
+      files:
+      - HEAD
+      - main
+    .git\refs\tags:
+      directories: []
+      files: []
+    images:
+      directories: []
+      files:
+      - BILD.png
+      - COM.png
+      - DOC.png
+      - LOOP.jpg
+      - TIM.png
+    profiles:
+      directories: []
+      files:
+      - Claude.yaml
+      - Gemini.yaml
+      - OpenAI.yaml
+    __pycache__:
+      directories: []
+      files:
+      - api.cpython-313.pyc
+      - gui.cpython-313.pyc
