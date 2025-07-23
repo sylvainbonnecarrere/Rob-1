@@ -43,7 +43,7 @@ def initialiser_profils_par_defaut():
         "Gemini.yaml": {
             "api_key": "",
             "api_url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-            "behavior": "excit\xE9, ronchon, repond en une phrase ou deux",
+            "behavior": "excité, ronchon, répond en une phrase ou deux",
             "curl_exe": "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY\" \\\n  -H 'Content-Type: application/json' \\\n  -X POST \\\n  -d '{\"contents\": [{\"parts\": [{\"text\": \"Explain how AI works\"}]}]}'",
             "default": True,
             "history": True,
@@ -76,7 +76,7 @@ def initialiser_profils_par_defaut():
         chemin_fichier = os.path.join(PROFILES_DIR, nom_fichier)
         if not os.path.exists(chemin_fichier):
             with open(chemin_fichier, "w", encoding="utf-8") as fichier:
-                yaml.dump(contenu, fichier)
+                yaml.dump(contenu, fichier, default_flow_style=False, allow_unicode=True)
 
 # Appeler cette fonction au démarrage si aucun fichier YAML n'est trouvé
 if not any(f.endswith(".yaml") for f in os.listdir(PROFILES_DIR)):
@@ -115,14 +115,14 @@ def lire_profil_defaut():
         for fichier in os.listdir(PROFILES_DIR):
             if fichier.endswith(".yaml"):
                 chemin_fichier = os.path.join(PROFILES_DIR, fichier)
-                with open(chemin_fichier, 'r') as f:
+                with open(chemin_fichier, 'r', encoding='utf-8') as f:
                     profil = yaml.safe_load(f)
                     if profil.get("default", False):
                         return profil
         # Si aucun profil n'est marqué comme défaut, charger Gemini
         chemin_gemini = os.path.join(PROFILES_DIR, "Gemini.yaml")
         if os.path.exists(chemin_gemini):
-            with open(chemin_gemini, 'r') as f:
+            with open(chemin_gemini, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
         else:
             messagebox.showerror("Erreur", "Le profil Gemini est introuvable. Veuillez le configurer dans SETUP.")
@@ -136,7 +136,7 @@ def get_default_profile():
     for fichier in os.listdir(PROFILES_DIR):
         if fichier.endswith(".yaml"):
             chemin_fichier = os.path.join(PROFILES_DIR, fichier)
-            with open(chemin_fichier, 'r') as f:
+            with open(chemin_fichier, 'r', encoding='utf-8') as f:
                 profil = yaml.safe_load(f)
                 if profil.get("default", False):
                     return fichier[:-5]  # Retirer l'extension .yaml
@@ -194,15 +194,46 @@ def preparer_requete_curl(final_prompt):
     curl_exe = profilAPIActuel.get('curl_exe', '')
     api_key = profilAPIActuel.get('api_key', '')
     replace_apikey = profilAPIActuel.get('replace_apikey', '')
+    
+    # Debug: Log des valeurs initiales
+    print(f"[DEBUG] curl_exe initial: {curl_exe[:100]}...")
+    print(f"[DEBUG] api_key: {api_key[:10]}..." if api_key else "[DEBUG] api_key: vide")
+    print(f"[DEBUG] replace_apikey: {replace_apikey}")
+    print(f"[DEBUG] final_prompt: {final_prompt[:100]}...")
 
     # Remplacer la variable définie dans replace_apikey par la clé API si elle est spécifiée
     if replace_apikey and replace_apikey in curl_exe:
         curl_exe = curl_exe.replace(replace_apikey, api_key)
+        print(f"[DEBUG] Après remplacement clé API: {curl_exe[:100]}...")
 
-    # Remplacer uniquement la chaîne de caractère api_url par final_prompt
-    api_url = profilAPIActuel.get('api_url', '')
-    if api_url in curl_exe:
-        curl_exe = curl_exe.replace(api_url, final_prompt)
+    # Remplacer uniquement le texte dans le JSON, pas dans l'URL
+    # Chercher le pattern "text": "..." dans le JSON
+    import re
+    pattern = r'"text":\s*"[^"]*"'
+    match = re.search(pattern, curl_exe)
+    if match:
+        # Échapper les caractères spéciaux pour JSON
+        final_prompt_escaped = (final_prompt
+                               .replace('\\', '\\\\')  # Échapper les backslash d'abord
+                               .replace('"', '\\"')    # Puis les guillemets
+                               .replace('\n', '\\n')   # Retours à la ligne
+                               .replace('\r', '\\r')   # Retours chariot
+                               .replace('\t', '\\t'))  # Tabulations
+        nouveau_text = f'"text": "{final_prompt_escaped}"'
+        curl_exe = curl_exe.replace(match.group(), nouveau_text)
+        print(f"[DEBUG] Après remplacement du texte JSON: {curl_exe[:100]}...")
+    else:
+        print(f"[DEBUG] Pattern text JSON non trouvé, utilisation méthode de fallback")
+        # Fallback : remplacer seulement "Explain how AI works" si présent
+        if "Explain how AI works" in curl_exe:
+            final_prompt_escaped = (final_prompt
+                                   .replace('\\', '\\\\')  # Échapper les backslash d'abord
+                                   .replace('"', '\\"')    # Puis les guillemets
+                                   .replace('\n', '\\n')   # Retours à la ligne
+                                   .replace('\r', '\\r')   # Retours chariot
+                                   .replace('\t', '\\t'))  # Tabulations
+            curl_exe = curl_exe.replace("Explain how AI works", final_prompt_escaped)
+            print(f"[DEBUG] Fallback appliqué: {curl_exe[:100]}...")
 
     return curl_exe
 
@@ -211,9 +242,12 @@ def corriger_commande_curl(commande):
     Corrige une commande curl pour Windows en échappant correctement les guillemets et en reformattant le JSON.
     """
     import json
+    
+    print(f"[DEBUG] Commande avant correction: {commande[:200]}...")
 
     # Supprimer les barres obliques inverses et les sauts de ligne
     commande_corrigee = commande.replace('\\\n', '').replace('\n', '').strip()
+    print(f"[DEBUG] Après nettoyage: {commande_corrigee[:200]}...")
 
     # Identifier et reformater les données JSON dans la commande
     if '-d' in commande_corrigee:
@@ -221,23 +255,76 @@ def corriger_commande_curl(commande):
             # Extraire la partie JSON après '-d'
             debut_json = commande_corrigee.index('-d') + 2
             json_brut = commande_corrigee[debut_json:].strip()
+            print(f"[DEBUG] JSON brut extrait: {json_brut[:200]}...")
 
-            # Nettoyer les guillemets simples et reformater en JSON valide
-            json_brut = json_brut.strip("'")
+            # Nettoyer les guillemets simples au début et à la fin
+            json_brut = json_brut.strip("'\"")
+            
+            # Vérifier si le JSON est valide avant de le reformater
             json_data = json.loads(json_brut)  # Charger en tant qu'objet Python
-            json_valide = json.dumps(json_data)  # Reformater en JSON compact
+            json_valide = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))  # JSON compact
 
-            # Échapper les guillemets pour Windows
-            json_valide = json_valide.replace('"', '\\"')
+            # Échapper les guillemets pour Windows et nettoyer les doubles échappements
+            json_valide = json_valide.replace('\\\\', '\\')  # Réduire les doubles backslash
+            json_valide = json_valide.replace('"', '\\"')    # Échapper pour Windows
 
             # Remplacer l'ancien JSON par le nouveau
             commande_corrigee = commande_corrigee[:debut_json] + f' "{json_valide}"'
+            print(f"[DEBUG] Après correction JSON: {commande_corrigee[:200]}...")
+        except json.JSONDecodeError as e:
+            print(f"[DEBUG] Erreur JSON: {e}")
+            print(f"[DEBUG] Tentative de récupération du JSON...")
+            
+            # Essayer de récupérer en extrayant seulement le JSON valide
+            try:
+                # Chercher les accolades ouvrantes et fermantes pour isoler le JSON
+                start_brace = json_brut.find('{')
+                if start_brace != -1:
+                    # Compter les accolades pour trouver la fermeture
+                    brace_count = 0
+                    end_pos = start_brace
+                    for i, char in enumerate(json_brut[start_brace:], start_brace):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_pos = i + 1
+                                break
+                    
+                    json_recupere = json_brut[start_brace:end_pos]
+                    print(f"[DEBUG] JSON récupéré: {json_recupere[:200]}...")
+                    
+                    json_data = json.loads(json_recupere)
+                    json_valide = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))
+                    # Nettoyer les doubles échappements avant d'échapper pour Windows
+                    json_valide = json_valide.replace('\\\\', '\\')  # Réduire les doubles backslash
+                    json_valide = json_valide.replace('"', '\\"')    # Échapper pour Windows
+                    commande_corrigee = commande_corrigee[:debut_json] + f' "{json_valide}"'
+                    print(f"[DEBUG] JSON récupéré et corrigé: {commande_corrigee[:200]}...")
+                else:
+                    print(f"[DEBUG] Impossible de récupérer le JSON, conservation de l'original")
+            except Exception as e2:
+                print(f"[DEBUG] Échec de récupération JSON: {e2}")
+                # En dernier recours, nettoyer manuellement
+                print(f"[DEBUG] Nettoyage manuel du JSON...")
+                # Nettoyer les caractères problématiques
+                json_brut_clean = (json_brut
+                                 .replace('\n', '\\n')
+                                 .replace('\r', '\\r')
+                                 .replace('\\\\', '\\')  # Réduire les doubles backslash
+                                 .replace('\\"', '"'))   # Dé-échapper temporairement
+                
+                # Ré-échapper pour Windows
+                json_brut_clean = json_brut_clean.replace('"', '\\"')
+                commande_corrigee = commande_corrigee[:debut_json] + f' "{json_brut_clean}"'
         except Exception as e:
-            pass
+            print(f"[DEBUG] Erreur correction JSON: {e}")
 
     # Remplacer les guillemets simples dans les en-têtes par des guillemets doubles
     commande_corrigee = commande_corrigee.replace("'Content-Type: application/json'", '"Content-Type: application/json"')
-
+    
+    print(f"[DEBUG] Commande finale: {commande_corrigee[:200]}...")
     return commande_corrigee
 
 def charger_profil_api():
@@ -430,16 +517,68 @@ def executer_commande_curl(requete_curl):
     with open("debug_curl.log", "a", encoding="utf-8") as log_file:
         log_file.write(f"\n--- Commande exécutée ---\n{requete_curl}\n")
 
-    # Exécuter la commande
-    resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=True, encoding='utf-8')
+    try:
+        # Exécuter la commande sans forcer l'encodage UTF-8
+        resultat = subprocess.run(requete_curl, shell=True, capture_output=True, text=False)
+        
+        # Décoder la sortie avec détection automatique d'encodage
+        stdout_decoded = ""
+        stderr_decoded = ""
+        
+        if resultat.stdout:
+            try:
+                # Essayer UTF-8 d'abord
+                stdout_decoded = resultat.stdout.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    # Essayer Windows-1252 (encodage courant Windows)
+                    stdout_decoded = resultat.stdout.decode('cp1252')
+                except UnicodeDecodeError:
+                    try:
+                        # Essayer ISO-8859-1 en dernier recours
+                        stdout_decoded = resultat.stdout.decode('iso-8859-1')
+                    except UnicodeDecodeError:
+                        # Forcer avec des caractères de remplacement
+                        stdout_decoded = resultat.stdout.decode('utf-8', errors='replace')
+        
+        if resultat.stderr:
+            try:
+                stderr_decoded = resultat.stderr.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    stderr_decoded = resultat.stderr.decode('cp1252')
+                except UnicodeDecodeError:
+                    try:
+                        stderr_decoded = resultat.stderr.decode('iso-8859-1')
+                    except UnicodeDecodeError:
+                        stderr_decoded = resultat.stderr.decode('utf-8', errors='replace')
+        
+        # Créer un objet résultat avec les chaînes décodées
+        class ResultatDecode:
+            def __init__(self, returncode, stdout, stderr):
+                self.returncode = returncode
+                self.stdout = stdout
+                self.stderr = stderr
+        
+        resultat_decode = ResultatDecode(resultat.returncode, stdout_decoded, stderr_decoded)
+        
+    except Exception as e:
+        # En cas d'erreur, créer un résultat d'erreur
+        class ResultatErreur:
+            def __init__(self, erreur):
+                self.returncode = 1
+                self.stdout = ""
+                self.stderr = f"Erreur d'exécution : {erreur}"
+        
+        resultat_decode = ResultatErreur(e)
 
     # Loguer le résultat dans debug_curl.log
     with open("debug_curl.log", "a", encoding="utf-8") as log_file:
-        log_file.write(f"--- Résultat ---\nCode de retour : {resultat.returncode}\n")
-        log_file.write(f"Sortie standard : {resultat.stdout}\n")
-        log_file.write(f"Sortie erreur : {resultat.stderr}\n")
+        log_file.write(f"--- Résultat ---\nCode de retour : {resultat_decode.returncode}\n")
+        log_file.write(f"Sortie standard : {resultat_decode.stdout}\n")
+        log_file.write(f"Sortie erreur : {resultat_decode.stderr}\n")
 
-    return resultat
+    return resultat_decode
 
 # Plan de tests pour les logs en console
 # 1. Vérifier que les commandes curl s'exécutent correctement et que la sortie est capturée en UTF-8.
@@ -719,7 +858,7 @@ def open_setup_menu():
     def charger_donnees_profil(profil):
         chemin_fichier = os.path.join(PROFILES_DIR, f"{profil}.yaml")
         try:
-            with open(chemin_fichier, 'r') as fichier:
+            with open(chemin_fichier, 'r', encoding='utf-8') as fichier:
                 return yaml.safe_load(fichier)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible de charger le profil {profil} : {e}")
@@ -745,14 +884,14 @@ def open_setup_menu():
             if fichier.endswith(".yaml"):
                 chemin_fichier = os.path.join(PROFILES_DIR, fichier)
                 try:
-                    with open(chemin_fichier, 'r') as fichier_yaml:
+                    with open(chemin_fichier, 'r', encoding='utf-8') as fichier_yaml:
                         config = yaml.safe_load(fichier_yaml)
 
                     # Mettre à jour la clé "default"
                     config["default"] = (fichier[:-5] == profil_selectionne)
 
-                    with open(chemin_fichier, 'w') as fichier_yaml:
-                        yaml.dump(config, fichier_yaml)
+                    with open(chemin_fichier, 'w', encoding='utf-8') as fichier_yaml:
+                        yaml.dump(config, fichier_yaml, default_flow_style=False, allow_unicode=True)
                 except Exception as e:
                     messagebox.showerror("Erreur", f"Erreur lors de la mise à jour du profil {fichier} : {e}")
 
@@ -763,7 +902,7 @@ def open_setup_menu():
             if fichier.endswith(".yaml"):
                 chemin_fichier = os.path.join(PROFILES_DIR, fichier)
                 try:
-                    with open(chemin_fichier, 'r') as fichier_yaml:
+                    with open(chemin_fichier, 'r', encoding='utf-8') as fichier_yaml:
                         config = yaml.safe_load(fichier_yaml)
                         if config.get("default", False):
                             return fichier[:-5]
@@ -863,8 +1002,8 @@ def open_setup_menu():
 
         chemin_fichier = os.path.join(PROFILES_DIR, f"{profil_selectionne}.yaml")
         try:
-            with open(chemin_fichier, 'w') as fichier:
-                yaml.dump(config_data, fichier)
+            with open(chemin_fichier, 'w', encoding='utf-8') as fichier:
+                yaml.dump(config_data, fichier, default_flow_style=False, allow_unicode=True)
             if default_profile_var.get():
                 definir_profil_defaut(profil_selectionne)
             messagebox.showinfo("Succès", f"Profil sauvegardé sous : {chemin_fichier}")
@@ -1070,6 +1209,16 @@ def creer_interface():
     root = tk.Tk()
     root.title("ROB-1")
 
+    # Gestion propre de la fermeture
+    def on_closing():
+        try:
+            root.quit()
+            root.destroy()
+        except:
+            pass
+
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+
     # Barre de menu principale
     menu_bar = Menu(root)
 
@@ -1092,10 +1241,14 @@ def creer_interface():
 
     logging.info("GUI application setup complete.")
 
-    root.mainloop()
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        print("Application fermée par l'utilisateur")
+        on_closing()
 
-# Add a simple window setup that closes completely without reopening
-def main():
+# Fonction main alternative - non utilisée quand appelée depuis main.py
+def main_simple():
     root = tk.Tk()
     root.title("Simple Window")
 
@@ -1110,4 +1263,5 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__":
-    main()
+    # Si le fichier est exécuté directement, utiliser l'interface principale
+    creer_interface()
