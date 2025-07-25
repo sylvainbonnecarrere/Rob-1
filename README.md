@@ -5,12 +5,12 @@ Ce projet vise à créer un système permettant de lancer et de gérer plusieurs
 ## Prérequis
 
 * Python 3.x
-* Librairies : `PyYAML`, `Flask` (installer avec `pip install pyyaml flask`)
+* Librairies : `PyYAML`, `Flask` (installer avec `pip install pyyaml flask`) etc...
 * En principe, si vous avez cette version de Python les dépendances s'installeront automatiquement.
 
 ## Configuration
 
-1.  La configuration des APIs est le préalable pour utiliser les API LLM  et l'application. Pour cela utiliser le menu Setup API
+1.  La configuration des APIs est le préalable pour utiliser les API LLM  et l'application. Pour cela utiliser le menu Setup API et choisissez un LLM en cochant la case default
 
 2.  Utilisez les champs rôle et comportement pour créer un agent.
   Exemples : 
