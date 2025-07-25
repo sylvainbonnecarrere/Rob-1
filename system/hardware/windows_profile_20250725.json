@@ -1,5 +1,5 @@
 {
-  "generated_at": "2025-07-25T12:54:21.358570",
+  "generated_at": "2025-07-25T15:32:03.223838",
   "os_info": {
     "name": "Windows",
     "version": "10",
@@ -12,7 +12,7 @@
   "hardware_info": {
     "cpu_cores": 2,
     "total_memory_gb": 7.93,
-    "disk_free_gb": 141.0
+    "disk_free_gb": 140.9
   },
   "app_info": {
     "directory": "C:\\AItest\\Rob-1",
@@ -25,9 +25,9 @@
       "api.py",
       "api_client.py",
       "api_key.txt",
-      "cleanup_migration.py",
       "config.yaml",
-      "config_manager.py"
+      "config_manager.py",
+      "final_cleanup.py"
     ]
   }
 }

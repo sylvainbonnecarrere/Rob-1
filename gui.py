@@ -903,8 +903,16 @@ def open_setup_menu():
         default_behavior_var.set(donnees_profil.get("behavior", ""))
         history_checkbutton_var.set(donnees_profil.get("history", False))
         default_profile_var.set(donnees_profil.get("default", False))
-        curl_exe_var.set(donnees_profil.get("curl_exe", ""))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
+        
+        # Charger le template curl au lieu de curl_exe
+        template_id = donnees_profil.get("template_id", "")
+        if template_id:
+            template_content = config_manager.load_template(template_id)
+            curl_exe_var.set(template_content if template_content else "")
+        else:
+            # Fallback vers curl_exe pour compatibilité
+            curl_exe_var.set(donnees_profil.get("curl_exe", ""))
 
     # Fonction pour définir un seul profil comme défaut
     def definir_profil_defaut(profil_selectionne):
@@ -914,20 +922,17 @@ def open_setup_menu():
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de la mise à jour du profil par défaut : {e}")
 
-    # Charger le profil par défaut au démarrage
+    # Charger le profil par défaut au démarrage via ConfigManager
     def charger_profil_defaut():
-        """Charge le profil marqué comme défaut ou retourne Gemini si aucun n'est défini."""
-        for fichier in os.listdir(PROFILES_DIR):
-            if fichier.endswith(".yaml"):
-                chemin_fichier = os.path.join(PROFILES_DIR, fichier)
-                try:
-                    with open(chemin_fichier, 'r', encoding='utf-8') as fichier_yaml:
-                        config = yaml.safe_load(fichier_yaml)
-                        if config.get("default", False):
-                            return fichier[:-5]
-                except Exception as e:
-                    messagebox.showerror("Erreur", f"Erreur lors du chargement du profil par défaut : {e}")
-        return "Gemini"  # Retourne Gemini par défaut si aucun profil n'est marqué comme défaut
+        """Charge le profil marqué comme défaut via ConfigManager."""
+        try:
+            profil_defaut = config_manager.get_default_profile()
+            if profil_defaut:
+                return profil_defaut.get('name', 'Gemini')
+            return "Gemini"  # Fallback si aucun profil par défaut
+        except Exception as e:
+            logging.error(f"Erreur lors du chargement du profil par défaut Setup API : {e}")
+            return "Gemini"
 
     # Choix du modèle (liste déroulante des profils existants)
     model_label = ttk.Label(setup_window, text="Nom de l'API :")
@@ -999,8 +1004,16 @@ def open_setup_menu():
         default_behavior_var.set(donnees_profil.get("behavior", ""))
         history_checkbutton_var.set(donnees_profil.get("history", False))
         default_profile_var.set(donnees_profil.get("default", False))
-        curl_exe_var.set(donnees_profil.get("curl_exe", ""))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
+        
+        # Charger le template curl au lieu de curl_exe
+        template_id = donnees_profil.get("template_id", "")
+        if template_id:
+            template_content = config_manager.load_template(template_id)
+            curl_exe_var.set(template_content if template_content else "")
+        else:
+            # Fallback vers curl_exe pour compatibilité
+            curl_exe_var.set(donnees_profil.get("curl_exe", ""))
 
     def enregistrer_configuration():
         profil_selectionne = selected_model.get()
@@ -1078,10 +1091,10 @@ def open_setup_file_menu():
     # Extensions disponibles
     extensions = [".py", ".js", ".html", ".css", ".txt", ".md", ".json", ".xml", ".c", ".cpp", ".java"]
     
-    # Charger la configuration actuelle
+    # Charger la configuration actuelle via ConfigManager
     def charger_config_actuelle():
         try:
-            profil_actuel = lire_profil_defaut()
+            profil_actuel = config_manager.get_default_profile()
             if profil_actuel and "file_generation" in profil_actuel:
                 config = profil_actuel["file_generation"]
                 enabled_var.set(config.get("enabled", False))
@@ -1138,8 +1151,12 @@ def open_setup_file_menu():
     main_frame.pack(fill="both", expand=True)
     
     # Titre avec nom de l'API par défaut
-    nom_profil_charge, _ = selectionProfilDefaut()
-    nom_api = nom_profil_charge.split('.')[0] if nom_profil_charge else "API"
+    try:
+        profil_defaut = config_manager.get_default_profile()
+        nom_api = profil_defaut.get('name', 'API') if profil_defaut else "API"
+    except:
+        nom_api = "API"
+    
     title_label = ttk.Label(main_frame, text=f"Configuration de Génération de Fichiers avec l'API {nom_api}", font=("Arial", 12, "bold"))
     title_label.pack(pady=(0, 10))
     
@@ -1201,14 +1218,14 @@ def open_setup_file_menu():
     
     def enregistrer_config():
         try:
-            # Charger le profil actuel
-            nom_profil_charge, profil_actuel = selectionProfilDefaut()
+            # Charger le profil actuel via ConfigManager
+            profil_actuel = config_manager.get_default_profile()
             
             if not profil_actuel:
                 messagebox.showerror("Erreur", "Impossible de charger le profil actuel.")
                 return
             
-            # Mise à jour de la configuration
+            # Mise à jour de la configuration file_generation
             profil_actuel["file_generation"] = {
                 "enabled": enabled_var.get(),
                 "mode": mode_var.get(),
@@ -1223,15 +1240,21 @@ def open_setup_file_menu():
                 }
             }
             
-            # Sauvegarder dans le fichier
-            nom_fichier = nom_profil_charge.replace('.yaml', '') if nom_profil_charge else 'Gemini'
-            chemin_fichier = os.path.join(PROFILES_DIR, f"{nom_fichier}.yaml")
+            # Sauvegarder via ConfigManager
+            nom_profil = profil_actuel.get('name', 'Gemini')
+            success = config_manager.save_profile(nom_profil, profil_actuel)
             
-            with open(chemin_fichier, 'w', encoding="utf-8") as fichier:
-                yaml.dump(profil_actuel, fichier, default_flow_style=False, allow_unicode=True)
-            
-            messagebox.showinfo("Succès", f"Configuration sauvegardée dans {nom_fichier}")
-            setup_file_window.destroy()
+            if success:
+                messagebox.showinfo("Succès", f"Configuration de génération sauvegardée pour {nom_profil}")
+                setup_file_window.destroy()
+                
+                # Mettre à jour le profil global pour refléter les changements immédiatement
+                global profilAPIActuel
+                profilAPIActuel = profil_actuel
+                
+                logging.info(f"Configuration file_generation mise à jour pour {nom_profil}")
+            else:
+                messagebox.showerror("Erreur", "Erreur lors de la validation ou sauvegarde du profil")
             
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde : {e}")
