@@ -1,6 +1,6 @@
 # Rob-1
 
-Ce projet vise à créer un système permettant de lancer et de gérer plusieurs agents spécialisés définis dans un fichier de configuration.
+Ce projet vise à créer un système permettant de lancer et de gérer plusieurs agents spécialisés. Il permet de se connecter sur différentes API LLM définies dans un fichier de configuration. Cette première version permet l'organisation et la sortie de fichiers, ainsi qu'un contournement de la contrainte stateless de l'api pour gérer un historique de conversations. 
 
 ## Prérequis
 
