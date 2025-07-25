@@ -1,4 +1,4 @@
-api_key: VOTRE_CLE_API_CLAUDE_ICI
+api_key: ''
 api_url: https://api.anthropic.com/v1/claude
 behavior: comportement initial
 curl_exe: ''

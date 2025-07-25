@@ -8,6 +8,10 @@ import json
 import charset_normalizer
 import logging
 
+# Importer notre nouveau système de configuration
+from config_manager import ConfigManager
+from system_profile_generator import generate_system_profile_at_startup
+
 # Configure logging to log initialization events
 logging.basicConfig(
     filename="application.log",
@@ -16,7 +20,7 @@ logging.basicConfig(
 )
 
 logging.info("Application started.")
-logging.info("Checking and initializing default profiles.")
+logging.info("Initializing new JSON configuration system.")
 
 PROFILES_DIR = "profiles"
 CONVERSATIONS_DIR = "conversations"
@@ -24,6 +28,15 @@ DEVELOPMENT_DIR = "development"
 os.makedirs(PROFILES_DIR, exist_ok=True)
 os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
 os.makedirs(DEVELOPMENT_DIR, exist_ok=True)
+
+# Initialiser le gestionnaire de configuration JSON
+config_manager = ConfigManager(".")
+
+# Générer le profil système au démarrage
+generate_system_profile_at_startup(".")
+
+# Assurer que les profils par défaut existent
+config_manager.create_default_profiles()
 
 def get_resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -132,58 +145,41 @@ def lire_profil_defaut():
         return None
 
 def get_default_profile():
-    """Charge le profil par défaut ou retourne Gemini si aucun n'est défini."""
-    for fichier in os.listdir(PROFILES_DIR):
-        if fichier.endswith(".yaml"):
-            chemin_fichier = os.path.join(PROFILES_DIR, fichier)
-            with open(chemin_fichier, 'r', encoding='utf-8') as f:
-                profil = yaml.safe_load(f)
-                if profil.get("default", False):
-                    return fichier[:-5]  # Retirer l'extension .yaml
-    return "Gemini"  # Retourne Gemini par défaut si aucun profil n'est marqué comme défaut
+    """Charge le profil par défaut via le ConfigManager."""
+    try:
+        default_profile = config_manager.get_default_profile()
+        if default_profile:
+            return default_profile['name']
+        return "Gemini"  # Fallback
+    except Exception as e:
+        logging.error(f"Erreur lors du chargement du profil par défaut : {e}")
+        return "Gemini"
 
 def selectionProfilDefaut():
     """
-    Parcourt les fichiers de profils dans 'profiles/', cherche le profil par défaut ('default: True'),
-    charge son contenu avec chargementProfil, sinon charge 'Gemini' par défaut.
+    Charge le profil par défaut via ConfigManager.
     Affiche le nom du profil chargé en haut de la fenêtre testAPI et logue le contenu.
     """
-    import yaml
-    import os
     global profilAPIActuel
-    profils_dir = "profiles"
-    profil_trouve = False
-    nom_profil_charge = None
-
-    for fichier in os.listdir(profils_dir):
-        if fichier.endswith(".yaml") or fichier.endswith(".yml") or fichier.endswith(".json"):
-            chemin_fichier = os.path.join(profils_dir, fichier)
-            try:
-                with open(chemin_fichier, "r", encoding="utf-8") as f:
-                    if fichier.endswith(".json"):
-                        import json
-                        profil = json.load(f)
-                    else:
-                        profil = yaml.safe_load(f)
-                if profil and profil.get("default", False):
-                    profilAPIActuel = profil
-                    nom_profil_charge = fichier
-                    profil_trouve = True
-                    break
-            except Exception as e:
-                pass
-
-    if not profil_trouve:
-        chemin_gemini = os.path.join(profils_dir, "Gemini.yaml")
-        if os.path.exists(chemin_gemini):
-            with open(chemin_gemini, "r", encoding="utf-8") as f:
-                profilAPIActuel = yaml.safe_load(f)
-            nom_profil_charge = "Gemini.yaml"
+    
+    try:
+        profil_defaut = config_manager.get_default_profile()
+        if profil_defaut:
+            profilAPIActuel = profil_defaut
+            nom_profil_charge = f"{profil_defaut['name']}.json"
+            logging.info(f"Profil par défaut chargé : {profil_defaut['name']}")
+            return nom_profil_charge, profilAPIActuel
         else:
+            # Fallback
             profilAPIActuel = {}
             nom_profil_charge = "Aucun profil trouvé"
-
-    return nom_profil_charge, profilAPIActuel
+            logging.warning("Aucun profil par défaut trouvé")
+            return nom_profil_charge, profilAPIActuel
+    except Exception as e:
+        logging.error(f"Erreur lors du chargement du profil par défaut : {e}")
+        profilAPIActuel = {}
+        nom_profil_charge = "Erreur de chargement"
+        return nom_profil_charge, profilAPIActuel
 
 # Correction pour s'assurer que GEMINI_API_KEY est remplacé correctement
 
@@ -191,11 +187,26 @@ def preparer_requete_curl(final_prompt):
     """
     Prépare une commande curl en utilisant le final_prompt et retourne une chaîne de caractères.
     """
-    curl_exe = profilAPIActuel.get('curl_exe', '')
+    # Nouveau système : utiliser les templates
+    template_id = profilAPIActuel.get('template_id', '')
+    curl_exe = ""
+    
+    if template_id:
+        template_content = config_manager.load_template(template_id)
+        if template_content:
+            curl_exe = template_content
+        else:
+            # Fallback vers curl_exe si le template n'existe pas
+            curl_exe = profilAPIActuel.get('curl_exe', '')
+    else:
+        # Fallback vers curl_exe pour compatibilité
+        curl_exe = profilAPIActuel.get('curl_exe', '')
+    
     api_key = profilAPIActuel.get('api_key', '')
-    replace_apikey = profilAPIActuel.get('replace_apikey', '')
+    replace_apikey = profilAPIActuel.get('replace_apikey', 'GEMINI_API_KEY')
     
     # Debug: Log des valeurs initiales
+    print(f"[DEBUG] template_id: {template_id}")
     print(f"[DEBUG] curl_exe initial: {curl_exe[:100]}...")
     print(f"[DEBUG] api_key: {api_key[:10]}..." if api_key else "[DEBUG] api_key: vide")
     print(f"[DEBUG] replace_apikey: {replace_apikey}")
@@ -234,6 +245,8 @@ def preparer_requete_curl(final_prompt):
                                    .replace('\t', '\\t'))  # Tabulations
             curl_exe = curl_exe.replace("Explain how AI works", final_prompt_escaped)
             print(f"[DEBUG] Fallback appliqué: {curl_exe[:100]}...")
+
+    return curl_exe
 
     return curl_exe
 
@@ -714,6 +727,20 @@ def ouvrir_fenetre_apitest():
     def creerCommandeAPI(profil):
         if not profil:
             return ""
+        
+        # Nouveau système : utiliser les templates séparés
+        template_id = profil.get('template_id', '')
+        if template_id:
+            template_content = config_manager.load_template(template_id)
+            if template_content:
+                # Remplacer la clé API dans le template
+                api_key = profil.get('api_key', '')
+                replace_key = profil.get('replace_apikey', 'GEMINI_API_KEY')
+                if api_key and replace_key:
+                    return template_content.replace(replace_key, api_key)
+                return template_content
+        
+        # Fallback : ancien système curl_exe (pour compatibilité)
         curl_exe = profil.get('curl_exe', '')
         api_key = profil.get('api_key', '')
         if curl_exe and api_key:
@@ -848,18 +875,19 @@ def open_setup_menu():
 
     # Fonction pour charger les profils disponibles
     def charger_profils():
-        profils = []
-        for fichier in os.listdir(PROFILES_DIR):
-            if fichier.endswith(".yaml"):
-                profils.append(fichier[:-5])  # Retirer l'extension .yaml
-        return profils
+        """Charge les profils via ConfigManager"""
+        return config_manager.list_profiles()
 
     # Fonction pour charger les données d'un profil sélectionné
     def charger_donnees_profil(profil):
-        chemin_fichier = os.path.join(PROFILES_DIR, f"{profil}.yaml")
+        """Charge un profil via ConfigManager"""
         try:
-            with open(chemin_fichier, 'r', encoding='utf-8') as fichier:
-                return yaml.safe_load(fichier)
+            profile_data = config_manager.load_profile(profil)
+            if profile_data:
+                return profile_data
+            else:
+                messagebox.showerror("Erreur", f"Impossible de charger le profil {profil}")
+                return {}
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible de charger le profil {profil} : {e}")
             return {}
@@ -880,20 +908,11 @@ def open_setup_menu():
 
     # Fonction pour définir un seul profil comme défaut
     def definir_profil_defaut(profil_selectionne):
-        for fichier in os.listdir(PROFILES_DIR):
-            if fichier.endswith(".yaml"):
-                chemin_fichier = os.path.join(PROFILES_DIR, fichier)
-                try:
-                    with open(chemin_fichier, 'r', encoding='utf-8') as fichier_yaml:
-                        config = yaml.safe_load(fichier_yaml)
-
-                    # Mettre à jour la clé "default"
-                    config["default"] = (fichier[:-5] == profil_selectionne)
-
-                    with open(chemin_fichier, 'w', encoding='utf-8') as fichier_yaml:
-                        yaml.dump(config, fichier_yaml, default_flow_style=False, allow_unicode=True)
-                except Exception as e:
-                    messagebox.showerror("Erreur", f"Erreur lors de la mise à jour du profil {fichier} : {e}")
+        """Utilise ConfigManager pour définir le profil par défaut"""
+        try:
+            config_manager.set_default_profile(profil_selectionne)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de la mise à jour du profil par défaut : {e}")
 
     # Charger le profil par défaut au démarrage
     def charger_profil_defaut():
@@ -990,23 +1009,46 @@ def open_setup_menu():
             return
 
         config_data = {
+            "name": profil_selectionne,
             "api_url": api_url_entry.get(),
             "api_key": api_key_entry.get().strip(),
             "role": role_entry.get(),
             "behavior": default_behavior_var.get(),
             "history": history_checkbutton_var.get(),
             "default": default_profile_var.get(),
-            "curl_exe": curl_exe_var.get(),
-            "replace_apikey": replace_apikey_var.get()
+            "replace_apikey": replace_apikey_var.get(),
+            "template_id": f"{profil_selectionne.lower()}_chat",
+            "file_generation": {
+                "enabled": False,
+                "mode": "simple",
+                "simple_config": {
+                    "include_question": True,
+                    "include_response": True,
+                    "base_filename": "conversation",
+                    "same_file": True
+                },
+                "dev_config": {
+                    "extension": ".py"
+                }
+            }
         }
 
-        chemin_fichier = os.path.join(PROFILES_DIR, f"{profil_selectionne}.yaml")
         try:
-            with open(chemin_fichier, 'w', encoding='utf-8') as fichier:
-                yaml.dump(config_data, fichier, default_flow_style=False, allow_unicode=True)
-            if default_profile_var.get():
-                definir_profil_defaut(profil_selectionne)
-            messagebox.showinfo("Succès", f"Profil sauvegardé sous : {chemin_fichier}")
+            # Sauvegarder via ConfigManager
+            success = config_manager.save_profile(profil_selectionne, config_data)
+            if success:
+                # Sauvegarder le template curl si fourni
+                curl_exe = curl_exe_var.get()
+                if curl_exe.strip():
+                    config_manager.save_template(f"{profil_selectionne.lower()}_chat", curl_exe)
+                
+                # Définir comme profil par défaut si nécessaire
+                if default_profile_var.get():
+                    config_manager.set_default_profile(profil_selectionne)
+                
+                messagebox.showinfo("Succès", f"Profil sauvegardé avec succès dans le nouveau format JSON")
+            else:
+                messagebox.showerror("Erreur", "Erreur lors de la validation/sauvegarde du profil")
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde du profil : {e}")
 
