@@ -1,3 +1,27 @@
+# 🚨 SÉCURITÉ - Ne jamais committer de clés API ou données sensibles 🚨
+
+# Clés API et configurations sensibles
+api_key.txt
+*.api_key
+.env
+.env.local
+.env.production
+
+# Profils contenant des clés API
+profiles_backup_conversation/
+profiles/*.json
+*.json.local
+
+# Logs contenant potentiellement des données sensibles
+*.log
+debug_curl.log
+application.log
+migration_conversation.log
+
+# Fichiers de conversation (peuvent contenir des données privées)
+conversations/
+development/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

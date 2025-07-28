@@ -264,137 +264,40 @@ class ConfigManager:
             return None
     
     def create_default_profiles(self) -> bool:
-        """Crée les profils par défaut si ils n'existent pas"""
-        default_profiles = {
-            "Gemini": {
-                "name": "Gemini",
-                "api_key": "",
-                "api_url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-                "behavior": "excité, ronchon, répond en une phrase ou deux",
-                "role": "alien rigolo",
-                "default": True,
-                "history": True,
-                "replace_apikey": "GEMINI_API_KEY",
-                "template_id": "gemini_chat",
-                "file_generation": {
-                    "enabled": False,
-                    "mode": "simple",
-                    "simple_config": {
-                        "include_question": True,
-                        "include_response": True,
-                        "base_filename": "conversation",
-                        "same_file": True
-                    },
-                    "dev_config": {
-                        "extension": ".py"
-                    }
-                },
-                "conversation": {
-                    "summary_enabled": True,
-                    "summary_threshold": {
-                        "words": 300,
-                        "sentences": 6
-                    },
-                    "summary_template_id": "default_summary",
-                    "show_indicators": True
-                }
-            },
-            "OpenAI": {
-                "name": "OpenAI",
-                "api_key": "",
-                "api_url": "https://api.openai.com/v1/completions",
-                "behavior": "comportement initial",
-                "role": "",
-                "default": False,
-                "history": False,
-                "replace_apikey": "",
-                "template_id": "openai_chat",
-                "file_generation": {
-                    "enabled": False,
-                    "mode": "simple",
-                    "simple_config": {
-                        "include_question": True,
-                        "include_response": True,
-                        "base_filename": "conversation",
-                        "same_file": True
-                    },
-                    "dev_config": {
-                        "extension": ".py"
-                    }
-                }
-            },
-            "Claude": {
-                "name": "Claude",
-                "api_key": "",
-                "api_url": "https://api.anthropic.com/v1/claude",
-                "behavior": "comportement initial",
-                "role": "",
-                "default": False,
-                "history": False,
-                "replace_apikey": "",
-                "template_id": "claude_chat",
-                "file_generation": {
-                    "enabled": False,
-                    "mode": "simple",
-                    "simple_config": {
-                        "include_question": True,
-                        "include_response": True,
-                        "base_filename": "conversation",
-                        "same_file": True
-                    },
-                    "dev_config": {
-                        "extension": ".py"
-                    }
-                }
-            }
-        }
+        """
+        Crée les profils par défaut à partir des templates sécurisés si ils n'existent pas
+        SÉCURITÉ: Les templates ne contiennent jamais de clés API
+        """
+        success = True
+        templates = ["Gemini", "Claude", "OpenAI"]
         
-        # Templates correspondants
-        templates = {
-            "gemini_chat": '''curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY" \\
-  -H 'Content-Type: application/json' \\
-  -X POST \\
-  -d '{"contents": [{"parts": [{"text": "Explain how AI works"}]}]}'  ''',
-            "openai_chat": "# Template OpenAI à développer",
-            "claude_chat": "# Template Claude à développer"
-        }
+        for template_name in templates:
+            profile_path = os.path.join(self.profiles_dir, f"{template_name}.json")
+            template_path = os.path.join(self.profiles_dir, f"{template_name}.json.template")
+            
+            # Si le profil n'existe pas, le créer à partir du template
+            if not os.path.exists(profile_path):
+                try:
+                    if os.path.exists(template_path):
+                        # Charger le template
+                        with open(template_path, 'r', encoding='utf-8') as f:
+                            template_data = json.load(f)
+                        
+                        # Sauvegarder comme profil (les clés API restent vides)
+                        success = self.save_profile(template_name, template_data) and success
+                        self.logger.info(f"✅ Profil {template_name} créé à partir du template sécurisé")
+                    else:
+                        self.logger.warning(f"⚠️ Template {template_path} introuvable")
+                        success = False
+                        
+                except Exception as e:
+                    self.logger.error(f"❌ Erreur création profil {template_name} : {e}")
+                    success = False
+            else:
+                self.logger.debug(f"Profil {template_name} existe déjà")
         
-        # Templates de conversation pour les résumés
-        conversation_templates = {
-            "default_summary": """Veuillez analyser la conversation suivante et créer un résumé concis qui préserve les informations essentielles pour maintenir la continuité de la discussion.
+        return success
 
-INSTRUCTIONS DE RÉSUMÉ :
-- Conservez les points clés et décisions importantes
-- Maintenez le contexte nécessaire pour les prochaines questions
-- Soyez concis mais informatif (maximum 150 mots)
-- Organisez par thèmes si plusieurs sujets sont abordés
-
-CONVERSATION À RÉSUMER :
-{HISTORIQUE_COMPLET}
-
-RÉSUMÉ CONTEXTUEL :"""
-        }
-        
-        try:
-            # Créer les profils
-            for profile_name, profile_data in default_profiles.items():
-                if not os.path.exists(os.path.join(self.profiles_dir, f"{profile_name}.json")):
-                    self.save_profile(profile_name, profile_data)
-            
-            # Créer les templates
-            for template_id, template_content in templates.items():
-                self.save_template(template_id, template_content)
-            
-            # Créer les templates de conversation
-            for template_id, template_content in conversation_templates.items():
-                self.save_conversation_template(template_id, template_content)
-            
-            self.logger.info("Profils et templates par défaut créés")
-            return True
-        except Exception as e:
-            self.logger.error(f"Erreur création profils défaut : {e}")
-            return False
-    
     def update_profile_with_conversation_config(self, profile_name: str) -> bool:
         """
         Met à jour un profil existant avec la configuration de conversation
