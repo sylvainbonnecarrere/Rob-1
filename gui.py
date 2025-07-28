@@ -68,7 +68,8 @@ def initialiser_profils_par_defaut():
             "default": True,
             "history": True,
             "role": "alien rigolo",
-            "replace_apikey": "GEMINI_API_KEY"
+            "replace_apikey": "GEMINI_API_KEY",
+            "template_id": "gemini_chat"
         },
         "OpenAI.yaml": {
             "api_key": "",
@@ -78,7 +79,8 @@ def initialiser_profils_par_defaut():
             "default": False,
             "history": False,
             "model": "OpenAI",
-            "replace_apikey": ""
+            "replace_apikey": "",
+            "template_id": "openai_chat"
         },
         "Claude.yaml": {
             "api_key": "",
@@ -88,7 +90,8 @@ def initialiser_profils_par_defaut():
             "default": False,
             "history": False,
             "role": "",
-            "replace_apikey": ""
+            "replace_apikey": "",
+            "template_id": "claude_chat"
         }
     }
 
@@ -1479,6 +1482,16 @@ def open_setup_menu():
 
     bouton_annuler = ttk.Button(boutons_frame, text="Annuler", command=setup_window.destroy)
     bouton_annuler.pack(side="left")
+
+    # Charger automatiquement les données du profil par défaut au démarrage
+    try:
+        # Créer un événement factice pour déclencher le chargement initial
+        class FakeEvent:
+            pass
+        fake_event = FakeEvent()
+        mettre_a_jour_champs(fake_event)
+    except Exception as e:
+        print(f"[DEBUG] Erreur lors du chargement initial du profil par défaut Setup API: {e}")
 
 def open_setup_file_menu():
     """Ouvre le formulaire de configuration de génération de fichiers."""
