@@ -101,3 +101,8 @@ conversations/
 
 # Configuration locale
 config_local.yaml
+
+# === LANCEURS OS-SPÉCIFIQUES ===
+# Lanceurs générés automatiquement (spécifiques à chaque machine)
+RUN.bat
+run.sh

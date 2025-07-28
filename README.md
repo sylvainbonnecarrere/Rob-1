@@ -20,24 +20,43 @@ Ce projet applicatif vise à créer un système permettant de lancer et de gére
 
 ## Lancement
 
+### Méthode 1 : Lancement direct (première fois)
+
 Exécutez le script `main.py` :
 
 ```bash
 python main.py
 ```
 
-Cela lancera les APIs des agents définis dans le fichier de configuration. Vous pourrez ensuite interagir avec ces APIs via des requêtes HTTP POST.
+Lors du premier lancement, l'application créera automatiquement un lanceur adapté à votre système d'exploitation :
+- **Windows** : `RUN.bat` 
+- **Linux/macOS** : `run.sh` - Exécutez `./run.sh` dans le terminal
 
-## Création de l'exécutable Windows (Instructions)
+### Méthode 2 : Utilisation d'une console
 
-Pour créer un exécutable Windows, suivez ces étapes :
+Lancer la commande une invite de commande, puis exécutez
 
-1.  Installez PyInstaller : `pip install pyinstaller`
-2.  Exécutez la commande suivante dans le répertoire du projet :
-    ```bash
-    pyinstaller --onefile --add-data "config.yaml;." main.py
-    ```
-3.  L'exécutable sera créé dans le dossier `dist`.
+```
+python main.py
+```
+
+
+> 💡 **Note Windows** : Le lanceur utilise `pythonw` pour éviter l'affichage de la console Python en arrière-plan.
+
+**Linux/macOS :**
+```bash
+./run.sh
+```
+
+### Méthode 3 : Générateur de lanceur manuel
+
+Si vous souhaitez recréer le lanceur, utilisez :
+
+```bash
+python create_launcher.py
+```
+
+Ce script vous permettra de générer un nouveau lanceur ou de remplacer l'existant.
 
 ## Interconnexion des Agents
 

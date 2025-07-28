@@ -4,6 +4,11 @@ import yaml
 import subprocess
 from gui import creer_interface
 
+# Importation pour la création du lanceur OS-spécifique
+import sys
+import platform
+import stat
+
 # Modification de la configuration des logs pour inclure la console
 logging.basicConfig(
     level=logging.INFO,
@@ -177,11 +182,153 @@ def execute_curl():
         print("Erreur lors de l'exécution de la requête CURL :")
         print(e.stderr)
 
+def check_and_create_launcher():
+    """
+    Vérifie et crée un lanceur OS-spécifique si nécessaire
+    
+    Returns:
+        bool: True si un lanceur existe ou a été créé, False sinon
+    """
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        current_os = platform.system().lower()
+        
+        # Déterminer le nom du lanceur selon l'OS
+        if current_os == 'windows' or sys.platform.startswith('win'):
+            launcher_name = 'RUN.bat'
+        else:
+            launcher_name = 'run.sh'
+        
+        launcher_path = os.path.join(script_dir, launcher_name)
+        
+        # Si le lanceur existe déjà, pas besoin de le recréer
+        if os.path.exists(launcher_path):
+            logging.info(f"Lanceur OS déjà présent: {launcher_name}")
+            return True
+        
+        # Créer le lanceur
+        logging.info(f"Création du lanceur pour {platform.system()}...")
+        
+        if current_os == 'windows' or sys.platform.startswith('win'):
+            # Contenu du fichier batch Windows
+            batch_content = """@echo off
+REM Lanceur automatique Rob-1 pour Windows
+
+echo ================================================
+echo 🚀 Lancement de Rob-1
+echo ================================================
+
+REM Changer vers le répertoire du script
+cd /d "%~dp0"
+
+REM Vérifier que Python est disponible
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo ❌ Python n'est pas installé ou pas dans le PATH
+    echo 💡 Veuillez installer Python depuis https://python.org
+    pause
+    exit /b 1
+)
+
+REM Vérifier que main.py existe
+if not exist "main.py" (
+    echo ❌ Fichier main.py introuvable
+    echo 📁 Répertoire actuel: %CD%
+    pause
+    exit /b 1
+)
+
+REM Lancer l'application et fermer cette fenêtre
+echo ✅ Lancement de main.py...
+start "" pythonw "main.py"
+exit
+"""
+            
+            with open(launcher_path, 'w', encoding='utf-8') as f:
+                f.write(batch_content)
+            
+            logging.info(f"✅ Lanceur Windows créé: {launcher_name}")
+            
+        else:  # Linux ou macOS
+            # Contenu du script shell Unix
+            shell_content = """#!/bin/bash
+# Lanceur automatique Rob-1 pour Linux/macOS
+
+echo "================================================"
+echo "🚀 Lancement de Rob-1"
+echo "================================================"
+
+# Obtenir le répertoire du script
+SCRIPT_DIR="$(dirname "$0")"
+cd "$SCRIPT_DIR"
+
+# Vérifier que Python est disponible
+if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+    echo "❌ Python n'est pas installé ou pas dans le PATH"
+    echo "💡 Veuillez installer Python depuis votre gestionnaire de paquets"
+    read -p "Appuyez sur Entrée pour continuer..."
+    exit 1
+fi
+
+# Déterminer la commande Python à utiliser
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+else
+    PYTHON_CMD="python"
+fi
+
+# Vérifier que main.py existe
+if [ ! -f "main.py" ]; then
+    echo "❌ Fichier main.py introuvable"
+    echo "📁 Répertoire actuel: $(pwd)"
+    read -p "Appuyez sur Entrée pour continuer..."
+    exit 1
+fi
+
+# Lancer l'application
+echo "✅ Lancement de main.py avec $PYTHON_CMD..."
+$PYTHON_CMD "main.py"
+
+# Récupérer le code de retour
+EXIT_CODE=$?
+
+# Gestion de fermeture
+if [ $EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "❌ Erreur lors de l'exécution (code: $EXIT_CODE)"
+    read -p "Appuyez sur Entrée pour continuer..."
+else
+    echo "✅ Application fermée normalement"
+    sleep 1
+fi
+
+exit $EXIT_CODE
+"""
+            
+            with open(launcher_path, 'w', encoding='utf-8') as f:
+                f.write(shell_content)
+            
+            # Rendre le script exécutable
+            os.chmod(launcher_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)  # 755
+            
+            os_name = "macOS" if current_os == 'darwin' else "Linux"
+            logging.info(f"✅ Lanceur {os_name} créé: {launcher_name}")
+        
+        return True
+        
+    except Exception as e:
+        logging.error(f"Erreur lors de la création du lanceur: {e}")
+        return False
+
 def main():
     """Point d'entrée principal de l'application."""
     logging.info("Application démarrée.")
     # Ajout d'un log pour indiquer le lancement initial de l'application
     logging.info("Lancement initial de l'application.")
+    
+    # Créer le lanceur OS-spécifique au premier lancement
+    check_and_create_launcher()
+    
     try:
         creer_interface()
     except Exception as e:
