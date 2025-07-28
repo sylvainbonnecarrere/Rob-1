@@ -43,3 +43,37 @@ conversations/
 debug_api.log
 debug_curl.log
 application.log
+# === DONNÉES SENSIBLES ===
+# Profils système générés (contiennent infos matériel)
+system/hardware/*_profile_*.json
+system/hardware/windows_profile_*.json
+system/hardware/linux_profile_*.json
+system/hardware/macos_profile_*.json
+
+# Logs applicatifs
+*.log
+debug_*.log
+application.log
+
+# Clés API et configuration sensible
+api_key.txt
+.env
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Fichiers temporaires
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Dossiers de développement/test
+development/
+conversations/
+
+# Configuration locale
+config_local.yaml

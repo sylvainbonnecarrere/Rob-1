@@ -1,0 +1,29 @@
+{
+  "generated_at": "YYYY-MM-DDTHH:MM:SS.ssssss",
+  "os_info": {
+    "name": "Windows|Linux|Darwin",
+    "version": "version_number",
+    "architecture": "AMD64|x86_64|ARM64"
+  },
+  "python_info": {
+    "version": "X.Y.Z",
+    "executable": "/path/to/python/executable"
+  },
+  "hardware_info": {
+    "cpu_cores": 0,
+    "total_memory_gb": 0.0,
+    "disk_free_gb": 0.0
+  },
+  "app_info": {
+    "directory": "/path/to/app/directory",
+    "script_path": "/path/to/main.py",
+    "key_files": [
+      "main.py",
+      "gui.py",
+      "config_manager.py",
+      "api_client.py",
+      "system_profile_generator.py",
+      "utils.py"
+    ]
+  }
+}

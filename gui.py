@@ -185,8 +185,13 @@ def selectionProfilDefaut():
 
 def preparer_requete_curl(final_prompt):
     """
-    Prépare une commande curl en utilisant le final_prompt et retourne une chaîne de caractères.
+    Prépare une commande curl robuste et multiplateforme.
+    Gère tous les caractères spéciaux de manière fiable sur Windows, Linux et macOS.
     """
+    import json
+    import re
+    import platform
+    
     # Nouveau système : utiliser les templates
     template_id = profilAPIActuel.get('template_id', '')
     curl_exe = ""
@@ -205,140 +210,307 @@ def preparer_requete_curl(final_prompt):
     api_key = profilAPIActuel.get('api_key', '')
     replace_apikey = profilAPIActuel.get('replace_apikey', 'GEMINI_API_KEY')
     
+    # Détection de l'OS pour l'échappement approprié
+    os_type = platform.system().lower()
+    is_windows = os_type == 'windows'
+    
     # Debug: Log des valeurs initiales
+    print(f"[DEBUG] OS détecté: {os_type}")
     print(f"[DEBUG] template_id: {template_id}")
     print(f"[DEBUG] curl_exe initial: {curl_exe[:100]}...")
     print(f"[DEBUG] api_key: {api_key[:10]}..." if api_key else "[DEBUG] api_key: vide")
     print(f"[DEBUG] replace_apikey: {replace_apikey}")
     print(f"[DEBUG] final_prompt: {final_prompt[:100]}...")
 
-    # Remplacer la variable définie dans replace_apikey par la clé API si elle est spécifiée
+    # Remplacer la variable définie dans replace_apikey par la clé API
     if replace_apikey and replace_apikey in curl_exe:
         curl_exe = curl_exe.replace(replace_apikey, api_key)
         print(f"[DEBUG] Après remplacement clé API: {curl_exe[:100]}...")
 
-    # Remplacer uniquement le texte dans le JSON, pas dans l'URL
-    # Chercher le pattern "text": "..." dans le JSON
-    import re
-    pattern = r'"text":\s*"[^"]*"'
-    match = re.search(pattern, curl_exe)
-    if match:
-        # Échapper les caractères spéciaux pour JSON
-        final_prompt_escaped = (final_prompt
-                               .replace('\\', '\\\\')  # Échapper les backslash d'abord
-                               .replace('"', '\\"')    # Puis les guillemets
-                               .replace('\n', '\\n')   # Retours à la ligne
-                               .replace('\r', '\\r')   # Retours chariot
-                               .replace('\t', '\\t'))  # Tabulations
-        nouveau_text = f'"text": "{final_prompt_escaped}"'
-        curl_exe = curl_exe.replace(match.group(), nouveau_text)
-        print(f"[DEBUG] Après remplacement du texte JSON: {curl_exe[:100]}...")
-    else:
-        print(f"[DEBUG] Pattern text JSON non trouvé, utilisation méthode de fallback")
-        # Fallback : remplacer seulement "Explain how AI works" si présent
-        if "Explain how AI works" in curl_exe:
-            final_prompt_escaped = (final_prompt
-                                   .replace('\\', '\\\\')  # Échapper les backslash d'abord
-                                   .replace('"', '\\"')    # Puis les guillemets
-                                   .replace('\n', '\\n')   # Retours à la ligne
-                                   .replace('\r', '\\r')   # Retours chariot
-                                   .replace('\t', '\\t'))  # Tabulations
-            curl_exe = curl_exe.replace("Explain how AI works", final_prompt_escaped)
-            print(f"[DEBUG] Fallback appliqué: {curl_exe[:100]}...")
-
-    return curl_exe
+    try:
+        # SOLUTION ROBUSTE MULTIPLATEFORME
+        # Étape 1: Extraire la partie JSON de la commande curl
+        json_match = re.search(r"-d\s+['\"](.+?)['\"](?:\s|$)", curl_exe, re.DOTALL)
+        
+        if json_match:
+            json_string = json_match.group(1)
+            print(f"[DEBUG] JSON extrait: {json_string}")
+            
+            # Étape 2: Parser le JSON template
+            try:
+                json_data = json.loads(json_string)
+                print(f"[DEBUG] JSON parsé avec succès: {json_data}")
+                
+                # Étape 3: NORMALISATION DU PROMPT pour éviter les conflits d'échappement
+                # Traiter les séquences d'échappement littérales comme du texte normal
+                prompt_normalise = final_prompt
+                
+                # Pas de transformation des séquences - on garde le texte tel quel
+                # json.dumps() se chargera de l'échappement correct
+                print(f"[DEBUG] Prompt normalisé: {repr(prompt_normalise)}")
+                
+                # Étape 4: Mettre à jour le texte dans la structure JSON
+                # Gestion robuste pour différentes structures d'API
+                if 'contents' in json_data:
+                    # Format Gemini
+                    if isinstance(json_data['contents'], list) and len(json_data['contents']) > 0:
+                        if 'parts' in json_data['contents'][0]:
+                            if isinstance(json_data['contents'][0]['parts'], list) and len(json_data['contents'][0]['parts']) > 0:
+                                json_data['contents'][0]['parts'][0]['text'] = prompt_normalise
+                elif 'messages' in json_data:
+                    # Format OpenAI/Claude
+                    if isinstance(json_data['messages'], list):
+                        # Chercher le message utilisateur le plus récent
+                        for message in reversed(json_data['messages']):
+                            if message.get('role') == 'user':
+                                message['content'] = prompt_normalise
+                                break
+                        else:
+                            # Si aucun message utilisateur trouvé, ajouter un nouveau
+                            json_data['messages'].append({'role': 'user', 'content': prompt_normalise})
+                elif 'prompt' in json_data:
+                    # Format simple avec prompt direct
+                    json_data['prompt'] = prompt_normalise
+                else:
+                    # Format inconnu, essayer de trouver un champ text
+                    def update_text_recursively(obj, new_text):
+                        if isinstance(obj, dict):
+                            for key, value in obj.items():
+                                if key == 'text' and isinstance(value, str):
+                                    obj[key] = new_text
+                                    return True
+                                elif isinstance(value, (dict, list)):
+                                    if update_text_recursively(value, new_text):
+                                        return True
+                        elif isinstance(obj, list):
+                            for item in obj:
+                                if update_text_recursively(item, new_text):
+                                    return True
+                        return False
+                    
+                    update_text_recursively(json_data, prompt_normalise)
+                
+                # Étape 5: Régénérer le JSON de manière propre et sûre
+                # json.dumps gère automatiquement l'échappement des caractères spéciaux
+                json_nouveau = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))
+                print(f"[DEBUG] JSON régénéré: {json_nouveau}")
+                
+                # Étape 6: ÉCHAPPEMENT MULTIPLATEFORME pour la ligne de commande
+                if is_windows:
+                    # Windows: échapper les guillemets doubles pour cmd/PowerShell
+                    json_escaped = json_nouveau.replace('"', '\\"')
+                    curl_nouveau = curl_exe.replace(json_match.group(0), f'-d "{json_escaped}"')
+                else:
+                    # Linux/macOS: utiliser des guillemets simples (plus sûr pour bash)
+                    # Échapper seulement les guillemets simples dans le JSON
+                    json_escaped = json_nouveau.replace("'", "'\"'\"'")  # Technique bash pour échapper '
+                    curl_nouveau = curl_exe.replace(json_match.group(0), f"-d '{json_escaped}'")
+                
+                print(f"[DEBUG] Commande finale ({os_type}): {curl_nouveau[:200]}...")
+                
+                # Étape 7: Validation finale - tester que le JSON est toujours valide
+                try:
+                    if is_windows:
+                        # Extraire et tester le JSON Windows
+                        test_json = json_escaped.replace('\\"', '"')
+                    else:
+                        # Extraire et tester le JSON Linux/macOS  
+                        test_json = json_escaped.replace("'\"'\"'", "'")
+                    
+                    json.loads(test_json)
+                    print(f"[DEBUG] ✅ JSON final validé avec succès")
+                except json.JSONDecodeError as validation_error:
+                    print(f"[DEBUG] ⚠️ Attention: JSON final invalide: {validation_error}")
+                
+                return curl_nouveau
+                
+            except json.JSONDecodeError as e:
+                print(f"[DEBUG] Erreur parsing JSON: {e}, utilisation méthode de secours")
+                # Méthode de secours si le JSON n'est pas parsable
+                pass
+        
+        # MÉTHODE DE SECOURS MULTIPLATEFORME
+        print("[DEBUG] Utilisation méthode de secours regex")
+        
+        # Fonction d'échappement sûre selon l'OS
+        def escape_for_shell(text, is_windows_os):
+            """Échappement adapté à l'OS"""
+            if is_windows_os:
+                # Windows: échapper pour JSON puis pour shell
+                escaped = json.dumps(text, ensure_ascii=False)[1:-1]  # Retirer les guillemets externes
+                return escaped.replace('"', '\\"')
+            else:
+                # Linux/macOS: utiliser l'échappement bash
+                return text.replace("'", "'\"'\"'")
+        
+        final_prompt_escaped = escape_for_shell(final_prompt, is_windows)
+        print(f"[DEBUG] Prompt échappé (secours): {final_prompt_escaped}")
+        
+        # Chercher et remplacer le texte dans le JSON avec regex robuste
+        patterns = [
+            r'"text":\s*"[^"]*"',     # Pattern Gemini
+            r'"content":\s*"[^"]*"',   # Pattern OpenAI/Claude
+            r'"prompt":\s*"[^"]*"',    # Pattern simple
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, curl_exe)
+            if match:
+                field_name = match.group().split(':')[0].strip()
+                if is_windows:
+                    nouveau_text = f'{field_name}: "{final_prompt_escaped}"'
+                else:
+                    nouveau_text = f"{field_name}: '{final_prompt_escaped}'"
+                curl_exe = curl_exe.replace(match.group(), nouveau_text)
+                print(f"[DEBUG] Pattern '{pattern}' trouvé et remplacé")
+                break
+        else:
+            # Dernière chance: remplacer le texte par défaut s'il existe
+            if "Explain how AI works" in curl_exe:
+                if is_windows:
+                    curl_exe = curl_exe.replace("Explain how AI works", final_prompt_escaped)
+                else:
+                    # Pour Linux/macOS, s'assurer que tout est entre guillemets simples
+                    curl_exe = curl_exe.replace('"Explain how AI works"', f"'{final_prompt_escaped}'")
+                print("[DEBUG] Remplacement texte par défaut effectué")
+        
+        return curl_exe
+        
+    except Exception as e:
+        print(f"[DEBUG] Erreur inattendue dans preparer_requete_curl: {e}")
+        # En cas d'erreur totale, retourner la commande originale
+        return curl_exe
 
     return curl_exe
 
 def corriger_commande_curl(commande):
     """
-    Corrige une commande curl pour Windows en échappant correctement les guillemets et en reformattant le JSON.
+    Corrige une commande curl de manière robuste et multiplateforme.
+    Fonctionne sur Windows, Linux et macOS.
     """
     import json
+    import re
+    import platform
     
+    # Détection de l'OS
+    os_type = platform.system().lower()
+    is_windows = os_type == 'windows'
+    
+    print(f"[DEBUG] Correction curl pour OS: {os_type}")
     print(f"[DEBUG] Commande avant correction: {commande[:200]}...")
 
-    # Supprimer les barres obliques inverses et les sauts de ligne
-    commande_corrigee = commande.replace('\\\n', '').replace('\n', '').strip()
-    print(f"[DEBUG] Après nettoyage: {commande_corrigee[:200]}...")
+    try:
+        # Nettoyer la commande des continuations de ligne
+        commande_corrigee = commande.replace('\\\n', '').replace('\n', '').strip()
+        print(f"[DEBUG] Après nettoyage continuations: {commande_corrigee[:200]}...")
 
-    # Identifier et reformater les données JSON dans la commande
-    if '-d' in commande_corrigee:
-        try:
-            # Extraire la partie JSON après '-d'
-            debut_json = commande_corrigee.index('-d') + 2
-            json_brut = commande_corrigee[debut_json:].strip()
-            print(f"[DEBUG] JSON brut extrait: {json_brut[:200]}...")
+        # Normaliser les en-têtes selon l'OS
+        if is_windows:
+            # Windows: préférer les guillemets doubles
+            commande_corrigee = re.sub(r"-H\s+['\"]([^'\"]*)['\"]", r'-H "\1"', commande_corrigee)
+        else:
+            # Linux/macOS: préférer les guillemets simples pour bash
+            commande_corrigee = re.sub(r"-H\s+['\"]([^'\"]*)['\"]", r"-H '\1'", commande_corrigee)
+        
+        print(f"[DEBUG] Après normalisation en-têtes: {commande_corrigee[:200]}...")
 
-            # Nettoyer les guillemets simples au début et à la fin
-            json_brut = json_brut.strip("'\"")
+        # Traitement robuste de la partie JSON selon l'OS
+        if is_windows:
+            # Windows: chercher JSON entre guillemets doubles
+            json_match = re.search(r'-d\s+"(.+?)"(?:\s|$)', commande_corrigee, re.DOTALL)
+        else:
+            # Linux/macOS: chercher JSON entre guillemets simples ou doubles
+            json_match = re.search(r"-d\s+['\"](.+?)['\"](?:\s|$)", commande_corrigee, re.DOTALL)
+        
+        if json_match:
+            json_string = json_match.group(1)
+            print(f"[DEBUG] JSON extrait pour correction: {json_string}")
             
-            # Vérifier si le JSON est valide avant de le reformater
-            json_data = json.loads(json_brut)  # Charger en tant qu'objet Python
-            json_valide = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))  # JSON compact
-
-            # Échapper les guillemets pour Windows et nettoyer les doubles échappements
-            json_valide = json_valide.replace('\\\\', '\\')  # Réduire les doubles backslash
-            json_valide = json_valide.replace('"', '\\"')    # Échapper pour Windows
-
-            # Remplacer l'ancien JSON par le nouveau
-            commande_corrigee = commande_corrigee[:debut_json] + f' "{json_valide}"'
-            print(f"[DEBUG] Après correction JSON: {commande_corrigee[:200]}...")
-        except json.JSONDecodeError as e:
-            print(f"[DEBUG] Erreur JSON: {e}")
-            print(f"[DEBUG] Tentative de récupération du JSON...")
-            
-            # Essayer de récupérer en extrayant seulement le JSON valide
             try:
-                # Chercher les accolades ouvrantes et fermantes pour isoler le JSON
-                start_brace = json_brut.find('{')
-                if start_brace != -1:
-                    # Compter les accolades pour trouver la fermeture
-                    brace_count = 0
-                    end_pos = start_brace
-                    for i, char in enumerate(json_brut[start_brace:], start_brace):
-                        if char == '{':
-                            brace_count += 1
-                        elif char == '}':
-                            brace_count -= 1
-                            if brace_count == 0:
-                                end_pos = i + 1
-                                break
-                    
-                    json_recupere = json_brut[start_brace:end_pos]
-                    print(f"[DEBUG] JSON récupéré: {json_recupere[:200]}...")
-                    
-                    json_data = json.loads(json_recupere)
-                    json_valide = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))
-                    # Nettoyer les doubles échappements avant d'échapper pour Windows
-                    json_valide = json_valide.replace('\\\\', '\\')  # Réduire les doubles backslash
-                    json_valide = json_valide.replace('"', '\\"')    # Échapper pour Windows
-                    commande_corrigee = commande_corrigee[:debut_json] + f' "{json_valide}"'
-                    print(f"[DEBUG] JSON récupéré et corrigé: {commande_corrigee[:200]}...")
+                # Pour Windows, dé-échapper d'abord si nécessaire
+                if is_windows:
+                    json_clean = json_string.replace('\\"', '"')
                 else:
-                    print(f"[DEBUG] Impossible de récupérer le JSON, conservation de l'original")
-            except Exception as e2:
-                print(f"[DEBUG] Échec de récupération JSON: {e2}")
-                # En dernier recours, nettoyer manuellement
-                print(f"[DEBUG] Nettoyage manuel du JSON...")
-                # Nettoyer les caractères problématiques
-                json_brut_clean = (json_brut
-                                 .replace('\n', '\\n')
-                                 .replace('\r', '\\r')
-                                 .replace('\\\\', '\\')  # Réduire les doubles backslash
-                                 .replace('\\"', '"'))   # Dé-échapper temporairement
+                    # Pour Linux/macOS, gérer les échappements bash
+                    json_clean = json_string.replace("'\"'\"'", "'")
                 
-                # Ré-échapper pour Windows
-                json_brut_clean = json_brut_clean.replace('"', '\\"')
-                commande_corrigee = commande_corrigee[:debut_json] + f' "{json_brut_clean}"'
-        except Exception as e:
-            print(f"[DEBUG] Erreur correction JSON: {e}")
+                # Tenter de parser et re-sérialiser proprement
+                json_data = json.loads(json_clean)
+                json_propre = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))
+                
+                print(f"[DEBUG] JSON nettoyé et re-sérialisé: {json_propre}")
+                
+                # Ré-échapper selon l'OS
+                if is_windows:
+                    json_escaped = json_propre.replace('"', '\\"')
+                    commande_corrigee = commande_corrigee.replace(
+                        json_match.group(0), 
+                        f'-d "{json_escaped}"'
+                    )
+                else:
+                    json_escaped = json_propre.replace("'", "'\"'\"'")
+                    commande_corrigee = commande_corrigee.replace(
+                        json_match.group(0), 
+                        f"-d '{json_escaped}'"
+                    )
+                
+                print(f"[DEBUG] JSON corrigé et remplacé: {commande_corrigee[:200]}...")
+                
+            except json.JSONDecodeError:
+                print("[DEBUG] JSON non parsable, nettoyage manuel intelligent")
+                
+                # Nettoyage manuel adapté à l'OS
+                if is_windows:
+                    # Windows: gérer les échappements Windows
+                    json_cleaned = (json_string
+                                  .replace('\\"', '"')      # Dé-échapper temporairement
+                                  .replace('\\\\', '\\')    # Simplifier backslashes
+                                  .replace('\n', '\\n')     # Échapper nouvelles lignes
+                                  .replace('\r', '\\r')     # Échapper retours chariot
+                                  .replace('\t', '\\t'))    # Échapper tabulations
+                    
+                    # Ré-échapper pour Windows
+                    json_cleaned = json_cleaned.replace('"', '\\"')
+                    commande_corrigee = commande_corrigee.replace(
+                        json_match.group(0), 
+                        f'-d "{json_cleaned}"'
+                    )
+                else:
+                    # Linux/macOS: nettoyage pour bash
+                    json_cleaned = (json_string
+                                  .replace("'\"'\"'", "'")  # Dé-échapper bash
+                                  .replace('\n', '\\n')     # Échapper nouvelles lignes
+                                  .replace('\r', '\\r')     # Échapper retours chariot
+                                  .replace('\t', '\\t'))    # Échapper tabulations
+                    
+                    # Ré-échapper pour bash
+                    json_cleaned = json_cleaned.replace("'", "'\"'\"'")
+                    commande_corrigee = commande_corrigee.replace(
+                        json_match.group(0), 
+                        f"-d '{json_cleaned}'"
+                    )
+                
+                print(f"[DEBUG] Nettoyage manuel appliqué: {commande_corrigee[:200]}...")
 
-    # Remplacer les guillemets simples dans les en-têtes par des guillemets doubles
-    commande_corrigee = commande_corrigee.replace("'Content-Type: application/json'", '"Content-Type: application/json"')
-    
-    print(f"[DEBUG] Commande finale: {commande_corrigee[:200]}...")
-    return commande_corrigee
+        else:
+            print("[DEBUG] Aucune section -d trouvée dans la commande")
+
+        # Vérification finale et normalisation selon l'OS
+        if is_windows:
+            # Windows: s'assurer que les URLs sont entre guillemets doubles
+            commande_corrigee = re.sub(r'curl\s+[\'"]([^\'"]*)[\'"]', r'curl "\1"', commande_corrigee)
+        else:
+            # Linux/macOS: préférer les guillemets simples pour les URLs
+            commande_corrigee = re.sub(r'curl\s+[\'"]([^\'"]*)[\'"]', r"curl '\1'", commande_corrigee)
+        
+        print(f"[DEBUG] Commande finale corrigée ({os_type}): {commande_corrigee[:200]}...")
+        return commande_corrigee
+
+    except Exception as e:
+        print(f"[DEBUG] Erreur dans corriger_commande_curl: {e}")
+        # En cas d'erreur, retourner la commande originale nettoyée au minimum
+        commande_securisee = commande.replace('\\\n', '').replace('\n', '').strip()
+        return commande_securisee
 
 def charger_profil_api():
     """
@@ -1067,11 +1239,15 @@ def open_setup_menu():
 
         setup_window.destroy()
 
-    bouton_enregistrer = ttk.Button(setup_window, text="Enregistrer", command=enregistrer_configuration)
-    bouton_enregistrer.grid(row=9, column=0, columnspan=3, pady=10)
+    # Frame pour disposer les boutons côte à côte
+    boutons_frame = ttk.Frame(setup_window)
+    boutons_frame.grid(row=9, column=0, columnspan=3, pady=10)
+    
+    bouton_enregistrer = ttk.Button(boutons_frame, text="Enregistrer", command=enregistrer_configuration)
+    bouton_enregistrer.pack(side="left", padx=(0, 10))
 
-    bouton_annuler = ttk.Button(setup_window, text="Annuler", command=setup_window.destroy)
-    bouton_annuler.grid(row=10, column=0, columnspan=3, pady=5)
+    bouton_annuler = ttk.Button(boutons_frame, text="Annuler", command=setup_window.destroy)
+    bouton_annuler.pack(side="left")
 
 def open_setup_file_menu():
     """Ouvre le formulaire de configuration de génération de fichiers."""
@@ -1086,10 +1262,50 @@ def open_setup_file_menu():
     base_filename_var = tk.StringVar(value="conversation")
     same_file_var = tk.BooleanVar(value=True)
     extension_var = tk.StringVar(value=".py")
+    langage_var = tk.StringVar(value="Python")  # Nouvelle variable pour le nom du langage
     enabled_var = tk.BooleanVar(value=False)
     
     # Extensions disponibles
-    extensions = [".py", ".js", ".html", ".css", ".txt", ".md", ".json", ".xml", ".c", ".cpp", ".java"]
+    extensions = [".py", ".js", ".ts", ".html", ".css", ".php", ".rb", ".go", ".kt", ".swift", 
+                  ".rs", ".dart", ".vue", ".jsx", ".tsx", ".scss", ".sass", ".less", ".sql", 
+                  ".txt", ".md", ".json", ".xml", ".yaml", ".yml", ".c", ".cpp", ".java", ".cs", ".sh"]
+    
+    # Correspondance langages/extensions pour interface utilisateur
+    langages_extensions = {
+        "C": ".c",
+        "C++": ".cpp", 
+        "C#": ".cs",
+        "CSS": ".css",
+        "Dart": ".dart",
+        "Go": ".go",
+        "HTML": ".html",
+        "Java": ".java",
+        "JavaScript": ".js",
+        "JSON": ".json",
+        "Kotlin": ".kt",
+        "Less": ".less",
+        "Markdown": ".md",
+        "PHP": ".php",
+        "Python": ".py",
+        "Ruby": ".rb",
+        "Rust": ".rs",
+        "Sass": ".sass",
+        "SCSS": ".scss",
+        "Shell": ".sh",
+        "SQL": ".sql",
+        "Swift": ".swift",
+        "Text": ".txt",
+        "TypeScript": ".ts",
+        "TypeScript JSX": ".tsx",
+        "Vue.js": ".vue",
+        "XML": ".xml",
+        "YAML": ".yaml",
+        "YAML (alt)": ".yml",
+        "React JSX": ".jsx"
+    }
+    
+    # Liste des langages triés alphabétiquement
+    langages_tries = sorted(langages_extensions.keys())
     
     # Charger la configuration actuelle via ConfigManager
     def charger_config_actuelle():
@@ -1107,7 +1323,16 @@ def open_setup_file_menu():
                 same_file_var.set(simple_config.get("same_file", True))
                 
                 dev_config = config.get("dev_config", {})
-                extension_var.set(dev_config.get("extension", ".py"))
+                extension_actuelle = dev_config.get("extension", ".py")
+                extension_var.set(extension_actuelle)
+                
+                # Trouver le langage correspondant à l'extension
+                langage_trouve = "Python"  # Défaut
+                for langage, ext in langages_extensions.items():
+                    if ext == extension_actuelle:
+                        langage_trouve = langage
+                        break
+                langage_var.set(langage_trouve)
         except Exception as e:
             logging.error(f"Erreur lors du chargement de la configuration : {e}")
     
@@ -1204,13 +1429,26 @@ def open_setup_file_menu():
     # Panel Mode Développement
     frame_development = ttk.LabelFrame(main_frame, text="Configuration Mode Développement", padding="10")
     
+    # Fonction pour mettre à jour l'extension quand le langage change
+    def on_langage_change(event=None):
+        langage_selectionne = langage_var.get()
+        if langage_selectionne in langages_extensions:
+            extension_var.set(langages_extensions[langage_selectionne])
+        update_button_state()
+    
     extension_frame = ttk.Frame(frame_development)
     extension_frame.pack(fill="x", pady=5)
-    ttk.Label(extension_frame, text="Extension :").pack(side="left")
-    extension_combo = ttk.Combobox(extension_frame, textvariable=extension_var, values=extensions, width=15)
-    extension_combo.pack(side="left", padx=(5, 0))
-    extension_combo.bind('<<ComboboxSelected>>', lambda e: update_button_state())
-    extension_combo.bind('<KeyRelease>', lambda e: update_button_state())
+    ttk.Label(extension_frame, text="Langage :").pack(side="left")
+    langage_combo = ttk.Combobox(extension_frame, textvariable=langage_var, values=langages_tries, width=20, state="readonly")
+    langage_combo.pack(side="left", padx=(5, 0))
+    langage_combo.bind('<<ComboboxSelected>>', on_langage_change)
+    
+    # Affichage de l'extension correspondante (lecture seule)
+    extension_info_frame = ttk.Frame(frame_development)
+    extension_info_frame.pack(fill="x", pady=5)
+    ttk.Label(extension_info_frame, text="Extension :").pack(side="left")
+    extension_info_label = ttk.Label(extension_info_frame, textvariable=extension_var, font=("Arial", 9, "italic"))
+    extension_info_label.pack(side="left", padx=(5, 0))
     
     # Bouton Enregistrer - créé ici pour être accessible aux fonctions
     button_frame = ttk.Frame(main_frame)
@@ -1261,7 +1499,10 @@ def open_setup_file_menu():
             logging.error(f"Erreur sauvegarde config file : {e}")
     
     bouton_enregistrer = ttk.Button(button_frame, text="Enregistrer", command=enregistrer_config, state="disabled")
-    bouton_enregistrer.pack(anchor="center")
+    bouton_enregistrer.pack(side="left", padx=(0, 10))
+    
+    bouton_annuler = ttk.Button(button_frame, text="Annuler", command=setup_file_window.destroy)
+    bouton_annuler.pack(side="left")
     
     # Initialisation
     charger_config_actuelle()
