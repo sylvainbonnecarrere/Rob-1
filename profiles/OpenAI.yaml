@@ -1,8 +1,0 @@
-api_key: ''
-api_url: https://api.openai.com/v1/completions
-behavior: comportement initial
-curl_exe: ''
-default: false
-history: false
-model: OpenAI
-replace_apikey: ''

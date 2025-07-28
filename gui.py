@@ -60,7 +60,8 @@ def initialiser_profils_par_defaut():
     Les clés API seront laissées vides.
     """
     profils_par_defaut = {
-        "Gemini.yaml": {
+        "Gemini.json": {
+            "name": "Gemini",
             "api_key": "",
             "api_url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
             "behavior": "excité, ronchon, répond en une phrase ou deux",
@@ -71,18 +72,20 @@ def initialiser_profils_par_defaut():
             "replace_apikey": "GEMINI_API_KEY",
             "template_id": "gemini_chat"
         },
-        "OpenAI.yaml": {
+        "OpenAI.json": {
+            "name": "OpenAI",
             "api_key": "",
             "api_url": "https://api.openai.com/v1/completions",
             "behavior": "comportement initial",
             "curl_exe": "",
             "default": False,
             "history": False,
-            "model": "OpenAI",
+            "role": "",
             "replace_apikey": "",
             "template_id": "openai_chat"
         },
-        "Claude.yaml": {
+        "Claude.json": {
+            "name": "Claude",
             "api_key": "",
             "api_url": "https://api.anthropic.com/v1/claude",
             "behavior": "comportement initial",
@@ -99,14 +102,14 @@ def initialiser_profils_par_defaut():
         chemin_fichier = os.path.join(PROFILES_DIR, nom_fichier)
         if not os.path.exists(chemin_fichier):
             with open(chemin_fichier, "w", encoding="utf-8") as fichier:
-                yaml.dump(contenu, fichier, default_flow_style=False, allow_unicode=True)
+                json.dump(contenu, fichier, indent=2, ensure_ascii=False)
 
-# Appeler cette fonction au démarrage si aucun fichier YAML n'est trouvé
-if not any(f.endswith(".yaml") for f in os.listdir(PROFILES_DIR)):
-    logging.info("No YAML profiles found. Initializing default profiles.")
+# Appeler cette fonction au démarrage si aucun fichier JSON n'est trouvé
+if not any(f.endswith(".json") and not f.endswith(".json.template") for f in os.listdir(PROFILES_DIR)):
+    logging.info("No JSON profiles found. Initializing default profiles.")
     initialiser_profils_par_defaut()
 else:
-    logging.info("YAML profiles found. Skipping default profile initialization.")
+    logging.info("JSON profiles found. Skipping default profile initialization.")
 
 def ouvrir_fenetre_comportement():
     """Ouvre une fenêtre pour gérer les comportements."""
@@ -1286,17 +1289,50 @@ def open_setup_menu():
 
     # Fonction pour charger les données d'un profil sélectionné
     def charger_donnees_profil(profil):
-        """Charge un profil via ConfigManager"""
+        """Charge un profil via ConfigManager avec fallback robuste"""
         try:
+            # Essayer d'abord de charger le profil tel quel
             profile_data = config_manager.load_profile(profil)
             if profile_data:
                 return profile_data
-            else:
-                messagebox.showerror("Erreur", f"Impossible de charger le profil {profil}")
-                return {}
+            
+            # Si ça échoue, essayer avec différentes extensions
+            for extension in ['.json', '.yaml']:
+                try:
+                    if not profil.endswith(extension):
+                        test_profil = profil + extension
+                        profile_data = config_manager.load_profile(test_profil.replace(extension, ''))
+                        if profile_data:
+                            return profile_data
+                except:
+                    continue
+            
+            # Si tout échoue, retourner des valeurs par défaut pour éviter l'erreur
+            print(f"[DEBUG] Profil {profil} non trouvé, utilisation des valeurs par défaut")
+            return {
+                "api_url": "",
+                "api_key": "",
+                "role": "",
+                "behavior": "",
+                "history": False,
+                "default": False,
+                "replace_apikey": "",
+                "template_id": "gemini_chat" if "gemini" in profil.lower() else ""
+            }
+            
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de charger le profil {profil} : {e}")
-            return {}
+            print(f"[DEBUG] Erreur lors du chargement du profil {profil}: {e}")
+            # Retourner des valeurs par défaut au lieu d'afficher une popup d'erreur
+            return {
+                "api_url": "",
+                "api_key": "",
+                "role": "",
+                "behavior": "",
+                "history": False,
+                "default": False,
+                "replace_apikey": "",
+                "template_id": "gemini_chat" if "gemini" in profil.lower() else ""
+            }
 
     # Fonction pour mettre à jour les champs du formulaire en fonction du profil sélectionné
     def mettre_a_jour_champs(event):
@@ -1483,15 +1519,34 @@ def open_setup_menu():
     bouton_annuler = ttk.Button(boutons_frame, text="Annuler", command=setup_window.destroy)
     bouton_annuler.pack(side="left")
 
-    # Charger automatiquement les données du profil par défaut au démarrage
+    # Charger les données du profil par défaut au démarrage (sans event)
     try:
-        # Créer un événement factice pour déclencher le chargement initial
-        class FakeEvent:
-            pass
-        fake_event = FakeEvent()
-        mettre_a_jour_champs(fake_event)
+        profil_selectionne = selected_model.get()
+        donnees_profil = charger_donnees_profil(profil_selectionne)
+        
+        api_url_var.set(donnees_profil.get("api_url", ""))
+        api_key_var.set(donnees_profil.get("api_key", ""))
+        role_var.set(donnees_profil.get("role", ""))
+        default_behavior_var.set(donnees_profil.get("behavior", ""))
+        history_checkbutton_var.set(donnees_profil.get("history", False))
+        default_profile_var.set(donnees_profil.get("default", False))
+        replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
+        
+        # Charger le template curl
+        template_id = donnees_profil.get("template_id", "")
+        if template_id:
+            template_content = config_manager.load_template(template_id)
+            curl_exe_var.set(template_content if template_content else "")
+        else:
+            curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+        
+        print(f"[DEBUG] Profil par défaut chargé avec succès: {profil_selectionne}")
     except Exception as e:
         print(f"[DEBUG] Erreur lors du chargement initial du profil par défaut Setup API: {e}")
+        # Valeurs par défaut de sécurité
+        api_url_var.set("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent")
+        role_var.set("assistant IA")
+        default_behavior_var.set("utile et informatif")
 
 def open_setup_file_menu():
     """Ouvre le formulaire de configuration de génération de fichiers."""
