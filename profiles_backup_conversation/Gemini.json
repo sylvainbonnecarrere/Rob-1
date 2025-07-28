@@ -1,0 +1,33 @@
+{
+  "name": "Gemini",
+  "api_url": "Explain how AI works",
+  "api_key": "AIzaSyCditmq1yWcLIE9QsTlD8_Le2RoJoGoFAw",
+  "role": "génie unique",
+  "behavior": "réponses très précises et synthéthiques",
+  "history": true,
+  "default": true,
+  "replace_apikey": "GEMINI_API_KEY",
+  "template_id": "gemini_chat",
+  "file_generation": {
+    "enabled": true,
+    "mode": "simple",
+    "simple_config": {
+      "include_question": true,
+      "include_response": true,
+      "base_filename": "conversation",
+      "same_file": true
+    },
+    "dev_config": {
+      "extension": ".py"
+    }
+  },
+  "conversation": {
+    "summary_enabled": true,
+    "summary_threshold": {
+      "words": 300,
+      "sentences": 6
+    },
+    "summary_template_id": "default_summary",
+    "show_indicators": true
+  }
+}

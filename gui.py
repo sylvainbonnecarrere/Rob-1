@@ -2,14 +2,18 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, Toplevel, Menu, PhotoImage
 import os
 import sys
+import re
+import platform
 import yaml
 import subprocess
 import json
 import charset_normalizer
 import logging
+from datetime import datetime
 
 # Importer notre nouveau système de configuration
 from config_manager import ConfigManager
+from conversation_manager import ConversationManager
 from system_profile_generator import generate_system_profile_at_startup
 
 # Configure logging to log initialization events
@@ -816,47 +820,155 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     else:
         champ_r.insert(tk.END, f"Erreur lors de l'exécution :\n{resultat.stderr}\n")
 
-# Correction pour s'assurer que l'historique est bien concaténé avec le prompt Q et envoyé comme valeur
-def soumettreQuestionAPI(champ_q, champ_r, champ_history):
+# Nouvelle logique avec ConversationManager
+def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=None, status_label=None):
+    """
+    Version améliorée avec gestion intelligente de l'historique via ConversationManager
+    """
     question = champ_q.get('1.0', tk.END).strip()
-
-    # Log du contenu de l'historique et du prompt Q
-    historique = champ_history.get('1.0', tk.END).strip()
-    log_variable = f"Historique discussion : {historique} \nNouvelle question : {question}"
-    print(log_variable)
-
-    # Transformation du prompt Q si history est activé
-    if profilAPIActuel.get('history', False):
-        question = f"{historique}\n{question}".strip()
-
+    
     champ_r.config(state="normal")
     champ_r.delete('1.0', tk.END)
+    
     if not question:
         champ_r.insert('1.0', "Veuillez saisir une question.")
         champ_r.config(state="disabled")
         return
 
-    profil = charger_profil_api()
-    prompt_concatene = generer_prompt(question, profil)
-    requete_curl = preparer_requete_curl(prompt_concatene)
-    requete_curl = corriger_commande_curl(requete_curl)
+    try:
+        # 1. Ajouter la question à l'historique du ConversationManager
+        if conversation_manager:
+            conversation_manager.add_message('user', question)
+            
+            # 2. Vérifier si un résumé est nécessaire AVANT l'appel API
+            if conversation_manager.should_summarize():
+                print("🔄 Seuil atteint - Génération du résumé...")
+                champ_r.insert(tk.END, "🔄 Génération du résumé contextuel...\n")
+                champ_r.update_idletasks()
+                
+                # Fonction wrapper pour l'appel API de résumé
+                def api_summary_call(prompt_text):
+                    profil = charger_profil_api()
+                    prompt_avec_profil = generer_prompt(prompt_text, profil)
+                    requete_curl = preparer_requete_curl(prompt_avec_profil)
+                    requete_curl = corriger_commande_curl(requete_curl)
+                    resultat = executer_commande_curl(requete_curl)
+                    
+                    if resultat.returncode == 0:
+                        try:
+                            reponse_json = json.loads(resultat.stdout)
+                            return reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+                        except:
+                            return "Erreur lors du résumé"
+                    return "Erreur API lors du résumé"
+                
+                # Générer le résumé
+                success = conversation_manager.summarize_history(api_summary_call)
+                
+                if success:
+                    stats = conversation_manager.get_stats()
+                    print(f"✅ Résumé #{stats['summary_count']} généré")
+                    champ_r.delete('1.0', tk.END)  # Nettoyer le message de progression
+                else:
+                    print("❌ Échec du résumé - continue avec l'historique complet")
+                    champ_r.insert(tk.END, "⚠️ Échec du résumé - conversation continue\n")
+            
+            # 3. Préparer les messages pour l'API
+            api_messages = conversation_manager.get_messages_for_api()
+            
+            # 4. Construire le prompt final en concaténant tous les messages
+            prompt_complet = ""
+            for msg in api_messages:
+                role_label = "Utilisateur" if msg['role'] == 'user' else "Assistant"
+                prompt_complet += f"{role_label}: {msg['parts'][0]['text']}\n"
+            
+            # Utiliser le prompt complet au lieu de la question simple
+            question_finale = prompt_complet.strip()
+        else:
+            # Fallback vers l'ancienne méthode si pas de ConversationManager
+            historique = champ_history.get('1.0', tk.END).strip()
+            if profilAPIActuel.get('history', False):
+                question_finale = f"{historique}\n{question}".strip()
+            else:
+                question_finale = question
 
-    # Exécuter la commande curl et afficher le résultat
-    resultat = executer_commande_curl(requete_curl)
-    afficher_resultat(resultat, requete_curl, champ_r, champ_q)
-
-    # Mettre à jour l'historique avec la nouvelle question et réponse
-    if resultat.returncode == 0:
-        try:
-            reponse_json = json.loads(resultat.stdout)
-            texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
-            nouveau_historique = f"Question : {question}\nRéponse : {texte_cible}"
-            champ_history.delete('1.0', tk.END)
-            champ_history.insert(tk.END, f"{historique}\n{nouveau_historique}".strip())
-        except Exception as e:
-            champ_r.insert(tk.END, f"Erreur lors de la mise à jour de l'historique : {e}\n")
-
-    champ_r.config(state="disabled")
+        # 5. Exécuter l'appel API principal
+        profil = charger_profil_api()
+        prompt_concatene = generer_prompt(question_finale, profil)
+        requete_curl = preparer_requete_curl(prompt_concatene)
+        requete_curl = corriger_commande_curl(requete_curl)
+        
+        resultat = executer_commande_curl(requete_curl)
+        
+        # 6. Traiter la réponse
+        if resultat.returncode == 0:
+            try:
+                reponse_json = json.loads(resultat.stdout)
+                texte_reponse = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+                
+                # 7. Ajouter la réponse au ConversationManager
+                if conversation_manager:
+                    conversation_manager.add_message('model', texte_reponse)
+                    
+                    # 8. Mettre à jour l'affichage de l'historique
+                    nouvel_historique = conversation_manager.get_display_history()
+                    champ_history.delete('1.0', tk.END)
+                    champ_history.insert(tk.END, nouvel_historique)
+                    
+                    # 9. Mettre à jour l'indicateur de statut
+                    if status_label:
+                        status_indicator = conversation_manager.get_status_indicator()
+                        status_label.config(text=status_indicator)
+                        
+                    # 10. Logging des statistiques
+                    stats = conversation_manager.get_stats()
+                    print(f"📊 Stats: {stats['total_words']} mots, {stats['total_sentences']} phrases")
+                    if stats['next_summary_needed']:
+                        print("⚠️ Prochain message déclenchera un résumé")
+                
+                else:
+                    # Fallback vers l'ancienne méthode d'historique
+                    historique = champ_history.get('1.0', tk.END).strip()
+                    nouveau_historique = f"Question : {question}\nRéponse : {texte_reponse}"
+                    champ_history.delete('1.0', tk.END)
+                    champ_history.insert(tk.END, f"{historique}\n{nouveau_historique}".strip())
+                
+                # Afficher la réponse
+                champ_r.insert('1.0', texte_reponse)
+                
+                # 11. GÉNÉRATION DE FICHIERS (restauré)
+                # Vérifier si la génération de fichiers est activée dans le profil
+                if profil.get('file_generation', {}).get('enabled', False):
+                    try:
+                        mode = profil.get('file_generation', {}).get('mode', 'simple')
+                        if mode == 'simple':
+                            generer_fichier_simple(question, texte_reponse, profil)
+                            print("📁 Fichier simple généré")
+                        elif mode == 'development':
+                            config_dev = profil.get('file_generation', {}).get('dev_config', {})
+                            extension = config_dev.get('extension', '.py')
+                            nom_fichier = f"dev_output_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            generer_fichier_development(nom_fichier, extension, texte_reponse)
+                            print(f"📁 Fichier development généré: {nom_fichier}{extension}")
+                    except Exception as e:
+                        print(f"⚠️ Erreur génération fichier: {e}")
+                
+                # Supprimer le contenu du champ question
+                champ_q.delete('1.0', tk.END)
+                
+            except json.JSONDecodeError as e:
+                champ_r.insert('1.0', f"Erreur de parsing JSON: {e}")
+                print(f"❌ Erreur JSON: {e}")
+        else:
+            champ_r.insert('1.0', f"Erreur API: {resultat.stderr}")
+            print(f"❌ Erreur API: {resultat.stderr}")
+            
+    except Exception as e:
+        champ_r.insert('1.0', f"Erreur système: {e}")
+        print(f"❌ Erreur système: {e}")
+    
+    finally:
+        champ_r.config(state="disabled")
 
 # Modification pour rendre le champ historique caché tout en conservant sa fonctionnalité
 def copier_au_presse_papier(champ_r):
@@ -894,6 +1006,21 @@ def ouvrir_fenetre_apitest():
 
     # Chargement du profil par défaut
     nom_profil_charge, profilAPIActuel = selectionProfilDefaut()
+    
+    # === INITIALISATION DU CONVERSATION MANAGER ===
+    conversation_manager = None
+    status_label = None
+    
+    # Vérifier si l'historique est activé et initialiser ConversationManager
+    if profilAPIActuel.get('history', False):
+        conversation_config = profilAPIActuel.get('conversation', {})
+        conversation_manager = ConversationManager(
+            config_manager=config_manager,
+            profile_config=conversation_config
+        )
+        print(f"✅ ConversationManager initialisé avec config: {conversation_config}")
+    else:
+        print("ℹ️  Historique désactivé - ConversationManager non initialisé")
 
     # Création de la commande API (champ caché)
     def creerCommandeAPI(profil):
@@ -930,6 +1057,16 @@ def ouvrir_fenetre_apitest():
     # Afficher le nom du profil API par défaut ou le préfixe du fichier
     label_profil = ttk.Label(cadre_principal, text=f"Profil chargé : {nom_profil_charge.split('.')[0]}", font=("Arial", 12, "bold"))
     label_profil.pack(pady=10)
+    
+    # === INDICATEUR DE STATUT CONVERSATION ===
+    if conversation_manager and conversation_manager.show_indicators:
+        status_label = ttk.Label(cadre_principal, text="🟢 0/300mots | 0/6phrases", 
+                                font=("Arial", 9), foreground="gray")
+        status_label.pack(pady=2)
+        
+        # Mise à jour initiale de l'indicateur
+        initial_status = conversation_manager.get_status_indicator()
+        status_label.config(text=initial_status)
 
     # Champ Q (question)
     label_q = ttk.Label(cadre_principal, text="Question (Q) :", font=("Arial", 10))
@@ -980,8 +1117,21 @@ def ouvrir_fenetre_apitest():
     bouton_copier = ttk.Button(frame_boutons, text="Copier la réponse", command=lambda: copier_au_presse_papier(champ_r))
     bouton_copier.pack(side="left", padx=10)
 
-    bouton_valider = ttk.Button(frame_boutons, text="Envoyer la question", command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history))
+    bouton_valider = ttk.Button(frame_boutons, text="Envoyer la question", 
+                                command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager, status_label))
     bouton_valider.pack(side="left", padx=10)
+    
+    # Bouton pour réinitialiser la conversation (si ConversationManager actif)
+    if conversation_manager:
+        def reset_conversation():
+            conversation_manager.reset_conversation()
+            champ_history.delete('1.0', tk.END)
+            if status_label:
+                status_label.config(text=conversation_manager.get_status_indicator())
+            print("🔄 Conversation réinitialisée")
+        
+        bouton_reset = ttk.Button(frame_boutons, text="Nouvelle conversation", command=reset_conversation)
+        bouton_reset.pack(side="left", padx=10)
     
     # Bouton enregistrer fichier (mode développement uniquement)
     if generation_active and mode_development:

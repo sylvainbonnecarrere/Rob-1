@@ -1,0 +1,24 @@
+{
+  "name": "OpenAI",
+  "api_key": "",
+  "api_url": "Bonjour, qui es-tu ?",
+  "behavior": "vif et anxieux, répond en 200 mots max.",
+  "role": "ALIEN assistant",
+  "default": false,
+  "history": false,
+  "replace_apikey": "TA_CLÉ_API",
+  "template_id": "openai_chat",
+  "file_generation": {
+    "enabled": false,
+    "mode": "simple",
+    "simple_config": {
+      "include_question": true,
+      "include_response": true,
+      "base_filename": "conversation",
+      "same_file": true
+    },
+    "dev_config": {
+      "extension": ".py"
+    }
+  }
+}
