@@ -1016,12 +1016,54 @@ def ouvrir_fenetre_apitest():
     
     # Vérifier si l'historique est activé et initialiser ConversationManager
     if profilAPIActuel.get('history', False):
-        conversation_config = profilAPIActuel.get('conversation', {})
-        conversation_manager = ConversationManager(
-            config_manager=config_manager,
-            profile_config=conversation_config
-        )
-        print(f"✅ ConversationManager initialisé avec config: {conversation_config}")
+        # 1. Créer automatiquement le profil backup s'il n'existe pas
+        nom_profil = nom_profil_charge.split('.')[0]
+        backup_profile_path = os.path.join("profiles_backup_conversation", f"{nom_profil}.json")
+        
+        try:
+            if not os.path.exists(backup_profile_path):
+                # Créer le dossier backup s'il n'existe pas
+                os.makedirs("profiles_backup_conversation", exist_ok=True)
+                
+                # Créer un profil backup par défaut
+                backup_profile = profilAPIActuel.copy()
+                backup_profile["conversation_management"] = {
+                    "words_enabled": True,
+                    "sentences_enabled": True,
+                    "tokens_enabled": False,
+                    "word_threshold": 500,
+                    "sentence_threshold": 25,
+                    "token_threshold": 1000,
+                    "summary_template": "défaut",
+                    "custom_instructions": "Résume la conversation précédente en conservant les points clés et le contexte important. Garde un ton professionnel et structure ton résumé de manière claire.",
+                    "auto_save": True
+                }
+                
+                with open(backup_profile_path, 'w', encoding='utf-8') as f:
+                    json.dump(backup_profile, f, indent=2, ensure_ascii=False)
+                
+                print(f"✅ Profil backup par défaut créé: {backup_profile_path}")
+            
+            # 2. Charger la configuration depuis le profil backup
+            with open(backup_profile_path, 'r', encoding='utf-8') as f:
+                backup_profile = json.load(f)
+            
+            conversation_config = backup_profile.get('conversation_management', {})
+            
+            # 3. Initialiser ConversationManager avec la configuration du profil backup
+            conversation_manager = ConversationManager(
+                config_manager=config_manager,
+                profile_config=conversation_config
+            )
+            print(f"✅ ConversationManager initialisé avec config depuis: {backup_profile_path}")
+            print(f"   Seuils: {conversation_config.get('word_threshold', 500)}mots, {conversation_config.get('sentence_threshold', 25)}phrases, {conversation_config.get('token_threshold', 1000)}tokens")
+            
+        except Exception as e:
+            # En cas d'erreur (données corrompues), popup et fermeture
+            messagebox.showerror("Erreur Configuration", 
+                               f"Erreur lors du chargement de la configuration d'historique:\n{e}\n\nLa fenêtre va se fermer.")
+            fenetre.destroy()
+            return
     else:
         print("ℹ️  Historique désactivé - ConversationManager non initialisé")
 
@@ -1070,6 +1112,42 @@ def ouvrir_fenetre_apitest():
         # Mise à jour initiale de l'indicateur
         initial_status = conversation_manager.get_status_indicator()
         status_label.config(text=initial_status)
+        
+        # Indicateur du profil de résumé utilisé
+        def get_resume_profile_info():
+            """Récupère les informations sur le profil de résumé depuis la configuration active"""
+            try:
+                if conversation_manager and hasattr(conversation_manager, 'config'):
+                    # Utiliser la configuration du ConversationManager actif
+                    template = conversation_manager.config.get("summary_template", "défaut")
+                else:
+                    # Fallback: lire depuis le profil backup
+                    nom_profil = profilAPIActuel.get('name', 'Inconnu')
+                    backup_profile_path = os.path.join("profiles_backup_conversation", f"{nom_profil}.json")
+                    
+                    if os.path.exists(backup_profile_path):
+                        with open(backup_profile_path, 'r', encoding='utf-8') as f:
+                            backup_profile = json.load(f)
+                        conv_mgmt = backup_profile.get("conversation_management", {})
+                        template = conv_mgmt.get("summary_template", "défaut")
+                    else:
+                        template = "défaut"
+                
+                # Formater l'affichage
+                if template.startswith("Template "):
+                    template_display = template.replace("Template ", "")
+                else:
+                    template_display = template
+                
+                return f"📋 Résumé: {template_display}"
+                
+            except Exception as e:
+                print(f"Erreur récupération profil résumé: {e}")
+                return "📋 Résumé: défaut"
+        
+        resume_profile_label = ttk.Label(cadre_principal, text=get_resume_profile_info(), 
+                                        font=("Arial", 9), foreground="blue")
+        resume_profile_label.pack(pady=1)
 
     # Champ Q (question)
     label_q = ttk.Label(cadre_principal, text="Question (Q) :", font=("Arial", 10))
@@ -1672,7 +1750,7 @@ def open_setup_history_menu():
     # Créer la fenêtre principale
     setup_history_window = Toplevel(root)
     setup_history_window.title("🕐 Setup History - Gestion Intelligente des Conversations")
-    setup_history_window.geometry("900x700")
+    setup_history_window.geometry("788x656")
     setup_history_window.resizable(True, True)
     
     # Variables pour l'interface
@@ -1683,7 +1761,7 @@ def open_setup_history_menu():
     word_threshold_var = tk.IntVar(value=500)
     sentence_threshold_var = tk.IntVar(value=25)
     token_threshold_var = tk.IntVar(value=1000)
-    template_var = tk.StringVar(value="défaut")  # Valeur par défaut
+    template_var = tk.StringVar(value="Template par défaut")  # Valeur par défaut avec nom clair
     auto_save_var = tk.BooleanVar(value=True)
     
     # Frame principal avec scrollbar
@@ -1698,6 +1776,86 @@ def open_setup_history_menu():
     
     main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     main_canvas.configure(yscrollcommand=scrollbar.set)
+    
+    # === SECTION 0: PROFIL D'HISTORIQUE ===
+    section0 = ttk.LabelFrame(scrollable_frame, text="👤 Profil d'historique", padding=15)
+    section0.pack(fill="x", padx=20, pady=10)
+    
+    # Affichage du profil actuel
+    profile_info_frame = ttk.Frame(section0)
+    profile_info_frame.pack(fill="x", pady=(0, 10))
+    
+    def update_profile_display():
+        """Met à jour l'affichage du profil actuel"""
+        profil_actuel = config_manager.get_default_profile()
+        if profil_actuel:
+            nom_profil = profil_actuel.get('name', 'Inconnu')
+            profile_label.config(text=f"Profil actuel: {nom_profil}")
+            # Mettre à jour les templates disponibles selon le profil
+            template_combo['values'] = get_available_templates()
+            # Recharger la configuration quand le profil change
+            load_current_config()
+        else:
+            profile_label.config(text="Profil actuel: Non défini")
+    
+    profile_label = ttk.Label(profile_info_frame, text="Profil actuel: Chargement...", font=("Arial", 10, "bold"))
+    profile_label.pack(anchor="w")
+    
+    # Templates de résumé dans le profil d'historique
+    template_frame = ttk.Frame(section0)
+    template_frame.pack(fill="x", pady=(15, 10))
+    
+    ttk.Label(template_frame, text="Template de résumé:", font=("Arial", 10, "bold")).pack(anchor="w")
+    
+    # Note explicative sur la flexibilité
+    help_template_label = ttk.Label(template_frame, 
+                                   text="Choisissez le profil d'historique à configurer. Vous pouvez associer n'importe quel profil d'historique à n'importe quelle API.", 
+                                   font=("Arial", 8, "italic"), foreground="gray", wraplength=400)
+    help_template_label.pack(anchor="w", pady=(2, 5))
+    
+    # Récupérer les templates disponibles depuis les APIs
+    def get_available_templates():
+        templates = ["Template par défaut"]  # Template par défaut avec nom plus clair
+        try:
+            # Récupérer TOUTES les APIs configurées (pas seulement celles avec historique activé)
+            api_profiles = config_manager.list_profiles()
+            for api_name in api_profiles:
+                template_name = f"Template {api_name}"
+                if template_name not in templates:
+                    templates.append(template_name)
+            
+            print(f"📋 Templates disponibles: {templates}")
+            
+        except Exception as e:
+            print(f"Erreur récupération templates: {e}")
+        return templates
+    
+    template_combo = ttk.Combobox(template_frame, textvariable=template_var, state="readonly", width=40)
+    template_combo['values'] = get_available_templates()
+    template_combo.pack(anchor="w", pady=(5, 0))
+    
+    # Instructions personnalisées pour le résumé
+    preview_frame = ttk.Frame(section0)
+    preview_frame.pack(fill="x", pady=(10, 0))
+    
+    ttk.Label(preview_frame, text="Instructions pour le résumé (éditable):", font=("Arial", 9, "bold")).pack(anchor="w")
+    
+    # Note explicative
+    help_label = ttk.Label(preview_frame, text="Ces instructions seront envoyées à l'API pour générer le résumé dans Test API", 
+                          font=("Arial", 8, "italic"), foreground="gray")
+    help_label.pack(anchor="w", pady=(2, 5))
+    
+    # Zone de texte éditable pour les instructions personnalisées
+    template_preview = tk.Text(
+        preview_frame, 
+        height=4, 
+        wrap=tk.WORD, 
+        bg="white",  # Fond blanc pour montrer que c'est éditable
+        relief="solid", 
+        borderwidth=1,
+        font=("Arial", 9)
+    )
+    template_preview.pack(fill="x", pady=(5, 0))
     
     # === SECTION 1: CONFIGURATION DES SEUILS ===
     section1 = ttk.LabelFrame(scrollable_frame, text="⚖️ Configuration des Seuils", padding=15)
@@ -1744,80 +1902,53 @@ def open_setup_history_menu():
     token_spinbox.pack(side="left", padx=(10, 5))
     ttk.Label(token_frame, text="(500-4000)", font=("Arial", 8, "italic")).pack(side="left")
     
-    # === SECTION 2: TEMPLATES DE RÉSUMÉ ===
-    section2 = ttk.LabelFrame(scrollable_frame, text="📄 Templates de Résumé", padding=15)
-    section2.pack(fill="x", padx=20, pady=10)
-    
-    # Sélection du template
-    template_frame = ttk.Frame(section2)
-    template_frame.pack(fill="x", pady=(0, 10))
-    
-    ttk.Label(template_frame, text="Template de résumé:", font=("Arial", 10, "bold")).pack(anchor="w")
-    
-    # Récupérer les templates disponibles depuis les APIs
-    def get_available_templates():
-        templates = ["défaut"]  # Template par défaut toujours disponible
-        try:
-            # Récupérer la liste des profils API
-            profiles = config_manager.list_profiles()
-            for profile_name in profiles:
-                profile_data = config_manager.load_profile(profile_name)
-                if profile_data and profile_data.get('history', False):  # Si history activé
-                    templates.append(f"Template {profile_name}")
-        except Exception as e:
-            print(f"Erreur récupération templates: {e}")
-        return templates
-    
-    template_combo = ttk.Combobox(template_frame, textvariable=template_var, state="readonly", width=40)
-    template_combo['values'] = get_available_templates()
-    template_combo.pack(anchor="w", pady=(5, 0))
-    
-    # Instructions personnalisées pour le résumé
-    preview_frame = ttk.Frame(section2)
-    preview_frame.pack(fill="x", pady=(10, 0))
-    
-    ttk.Label(preview_frame, text="Instructions pour le résumé (éditable):", font=("Arial", 9, "bold")).pack(anchor="w")
-    
-    # Note explicative
-    help_label = ttk.Label(preview_frame, text="Ces instructions seront envoyées à l'API pour générer le résumé dans Test API", 
-                          font=("Arial", 8, "italic"), foreground="gray")
-    help_label.pack(anchor="w", pady=(2, 5))
-    
-    # Zone de texte éditable pour les instructions personnalisées
-    template_preview = tk.Text(
-        preview_frame, 
-        height=4, 
-        wrap=tk.WORD, 
-        bg="white",  # Fond blanc pour montrer que c'est éditable
-        relief="solid", 
-        borderwidth=1,
-        font=("Arial", 9)
-    )
-    template_preview.pack(fill="x", pady=(5, 0))
-    
     # Variable pour stocker les instructions personnalisées
     custom_instructions_var = tk.StringVar()
     
     # === FONCTIONS D'UPDATE ===
     def update_template_preview(*args):
-        """Charge les instructions par défaut selon le template sélectionné"""
+        """Met à jour seulement les instructions dans le textarea selon le template sélectionné"""
         selected_template = template_var.get()
         
-        # Instructions par défaut selon le template choisi
-        if selected_template == "défaut":
-            default_instructions = "Résume la conversation précédente en conservant les points clés et le contexte important. Garde un ton professionnel et structure ton résumé de manière claire."
-        elif selected_template.startswith("Template "):
-            # Template d'une API spécifique
-            api_name = selected_template.replace("Template ", "")
-            default_instructions = f"Résume la conversation en utilisant le style et les préférences configurées pour {api_name}. Adapte le résumé au contexte et aux besoins spécifiques de cette API."
-        else:
-            default_instructions = "Résume la conversation précédente."
-        
-        # Charger les instructions par défaut seulement si le champ est vide
-        current_content = template_preview.get("1.0", tk.END).strip()
-        if not current_content:
+        try:
+            if selected_template == "Template par défaut":
+                # Instructions par défaut
+                default_instructions = "Résume la conversation précédente en conservant les points clés et le contexte important. Garde un ton professionnel et structure ton résumé de manière claire."
+                
+            elif selected_template.startswith("Template "):
+                # Instructions pour cette API spécifique
+                api_name = selected_template.replace("Template ", "")
+                
+                # Essayer de charger les instructions personnalisées depuis le backup
+                backup_profile_path = os.path.join("profiles_backup_conversation", f"{api_name}.json")
+                default_instructions = f"Résume la conversation en utilisant le style et les préférences configurées pour {api_name}. Adapte le résumé au contexte et aux besoins spécifiques de cette API."
+                
+                if os.path.exists(backup_profile_path):
+                    try:
+                        with open(backup_profile_path, 'r', encoding='utf-8') as f:
+                            template_profile = json.load(f)
+                        
+                        template_conv_mgmt = template_profile.get("conversation_management", {})
+                        custom_instructions = template_conv_mgmt.get("custom_instructions", "")
+                        
+                        if custom_instructions:
+                            default_instructions = custom_instructions
+                            
+                    except Exception as e:
+                        print(f"Erreur chargement instructions {api_name}: {e}")
+                        
+            else:
+                # Template non reconnu
+                default_instructions = "Résume la conversation précédente."
+            
+            # Mettre à jour le textarea uniquement
             template_preview.delete("1.0", tk.END)
             template_preview.insert("1.0", default_instructions)
+                
+        except Exception as e:
+            print(f"❌ Erreur lors de la mise à jour du preview: {e}")
+            template_preview.delete("1.0", tk.END)
+            template_preview.insert("1.0", "Résume la conversation précédente.")
     
     def get_custom_instructions():
         """Récupère les instructions personnalisées saisies par l'utilisateur"""
@@ -1830,47 +1961,95 @@ def open_setup_history_menu():
     
     
     def load_current_config():
-        """Charge la configuration actuelle depuis le ConversationManager"""
+        """Charge la configuration depuis le template sélectionné"""
         global conversation_manager
         try:
-            if conversation_manager:
-                # Charger les paramètres depuis conversation_manager
-                # Note: Pas besoin de checkbox activation - c'est automatique si history activé
-                
-                # Charger les seuils depuis le config du ConversationManager
-                config = conversation_manager.config
-                word_threshold_var.set(config.get("word_threshold", 500))
-                sentence_threshold_var.set(config.get("sentence_threshold", 25))
-                token_threshold_var.set(config.get("token_threshold", 1000))
-                
-                # Charger les modes actifs depuis la configuration
-                words_enabled_var.set(config.get("words_enabled", True))
-                sentences_enabled_var.set(config.get("sentences_enabled", True))
-                tokens_enabled_var.set(config.get("tokens_enabled", True))
-                
-                # Charger le template sélectionné et ses instructions
-                template_var.set(config.get("summary_template", "défaut"))
-                
-                # Charger les instructions personnalisées si elles existent
-                custom_instructions = config.get("custom_instructions", "")
-                if custom_instructions:
-                    set_custom_instructions(custom_instructions)
+            selected_template = template_var.get()
+            
+            if selected_template == "Template par défaut":
+                # Utiliser le profil par défaut
+                profil_actuel = config_manager.get_default_profile()
+                if profil_actuel:
+                    nom_profil = profil_actuel.get('name', 'Gemini')
                 else:
-                    # Charger les instructions par défaut
+                    print("❌ Aucun profil par défaut défini")
+                    return
+            elif selected_template.startswith("Template "):
+                # Utiliser le profil spécifique du template
+                nom_profil = selected_template.replace("Template ", "")
+            else:
+                print(f"❌ Template non reconnu: {selected_template}")
+                return
+            
+            # Charger depuis profiles_backup_conversation
+            backup_profile_path = os.path.join("profiles_backup_conversation", f"{nom_profil}.json")
+            
+            if os.path.exists(backup_profile_path):
+                with open(backup_profile_path, 'r', encoding='utf-8') as f:
+                    backup_profile = json.load(f)
+                
+                # Charger la configuration conversation_management si elle existe
+                conv_mgmt = backup_profile.get("conversation_management", {})
+                
+                if conv_mgmt:
+                    # Charger les seuils
+                    word_threshold_var.set(conv_mgmt.get("word_threshold", 500))
+                    sentence_threshold_var.set(conv_mgmt.get("sentence_threshold", 25))
+                    token_threshold_var.set(conv_mgmt.get("token_threshold", 1000))
+                    
+                    # Charger les modes actifs
+                    words_enabled_var.set(conv_mgmt.get("words_enabled", True))
+                    sentences_enabled_var.set(conv_mgmt.get("sentences_enabled", True))
+                    tokens_enabled_var.set(conv_mgmt.get("tokens_enabled", False))
+                    
+                    # Charger les instructions personnalisées
+                    custom_instructions = conv_mgmt.get("custom_instructions", "")
+                    if custom_instructions:
+                        set_custom_instructions(custom_instructions)
+                    else:
+                        update_template_preview()
+                    
+                    print(f"✅ Configuration chargée depuis {backup_profile_path}")
+                else:
+                    # Aucune configuration conversation_management, utiliser les défauts
+                    print(f"⚠️  Aucune config conversation_management dans {nom_profil}, utilisation des défauts")
+                    # Garder les valeurs par défaut mais charger les instructions selon le template
                     update_template_preview()
+            else:
+                # Fichier backup n'existe pas, utiliser les défauts
+                print(f"⚠️  Profil backup {backup_profile_path} non trouvé, utilisation des défauts")
+                # Charger les instructions par défaut pour ce template
+                update_template_preview()
                 
         except Exception as e:
             messagebox.showwarning("Avertissement", f"Erreur lors du chargement de la configuration: {e}")
+            print(f"❌ Erreur chargement config: {e}")
+            update_template_preview()
     
     def save_configuration():
-        """Sauvegarde la configuration des préférences Setup History dans le profil"""
+        """Sauvegarde la configuration des préférences Setup History dans le profil sélectionné"""
         global conversation_manager
         
         try:
-            # 1. Toujours mettre à jour/créer le ConversationManager avec les nouveaux paramètres
-            # Note: L'activation dépend de l'option 'history' dans Set up API, pas d'ici
+            # 1. Déterminer le profil cible selon le template sélectionné
+            selected_template = template_var.get()
             
-            # Récupérer les instructions personnalisées saisies par l'utilisateur
+            if selected_template == "Template par défaut":
+                # Utiliser le profil par défaut
+                profil_actuel = config_manager.get_default_profile()
+                if profil_actuel:
+                    nom_profil = profil_actuel.get('name', 'Gemini')
+                else:
+                    messagebox.showerror("Erreur", "Aucun profil par défaut défini")
+                    return
+            elif selected_template.startswith("Template "):
+                # Utiliser le profil spécifique du template
+                nom_profil = selected_template.replace("Template ", "")
+            else:
+                messagebox.showerror("Erreur", f"Template non reconnu: {selected_template}")
+                return
+            
+            # 2. Préparer la configuration conversation
             custom_instructions = get_custom_instructions()
             
             config_conv = {
@@ -1884,44 +2063,69 @@ def open_setup_history_menu():
                 "custom_instructions": custom_instructions
             }
             
+            # 3. Mettre à jour le ConversationManager si nécessaire
             if not conversation_manager:
-                conversation_manager = ConversationManager(config_conv)
+                conversation_manager = ConversationManager(profile_config=config_conv)
             else:
-                # Mettre à jour la configuration existante
                 conversation_manager.config.update(config_conv)
             
-            # 2. Sauvegarder dans le profil via ConfigManager
-            profil_actuel = config_manager.get_default_profile()
-            if profil_actuel:
-                # Ajouter/mettre à jour la section conversation_management
-                profil_actuel["conversation_management"] = {
-                    "words_enabled": words_enabled_var.get(),
-                    "sentences_enabled": sentences_enabled_var.get(),
-                    "tokens_enabled": tokens_enabled_var.get(),
-                    "word_threshold": word_threshold_var.get(),
-                    "sentence_threshold": sentence_threshold_var.get(),
-                    "token_threshold": token_threshold_var.get(),
-                    "summary_template": template_var.get(),
-                    "custom_instructions": custom_instructions,
-                    "auto_save": auto_save_var.get()
-                }
-                
-                # Sauvegarder le profil
-                nom_profil = profil_actuel.get('name', 'Gemini')
-                success = config_manager.save_profile(nom_profil, profil_actuel)
-                
-                if success:
-                    messagebox.showinfo("Succès", f"Configuration Setup History sauvegardée pour {nom_profil}")
-                    setup_history_window.destroy()
-                    logging.info(f"Configuration conversation_management mise à jour pour {nom_profil}")
-                else:
-                    messagebox.showerror("Erreur", "Erreur lors de la sauvegarde de la configuration")
+            # 4. Sauvegarder dans le profil backup conversation spécifique
+            backup_profile_path = os.path.join("profiles_backup_conversation", f"{nom_profil}.json")
+            
+            if os.path.exists(backup_profile_path):
+                # Charger le profil backup existant
+                with open(backup_profile_path, 'r', encoding='utf-8') as f:
+                    backup_profile = json.load(f)
             else:
-                messagebox.showerror("Erreur", "Impossible de charger le profil actuel")
+                # Créer un nouveau profil backup basé sur le profil principal
+                try:
+                    profil_principal = config_manager.load_profile(nom_profil)
+                    if profil_principal:
+                        backup_profile = profil_principal.copy()
+                    else:
+                        # Profil principal n'existe pas, créer un profil minimal
+                        backup_profile = {
+                            "name": nom_profil,
+                            "api_key": "",
+                            "history": True
+                        }
+                except:
+                    # En cas d'erreur, créer un profil minimal
+                    backup_profile = {
+                        "name": nom_profil,
+                        "api_key": "",
+                        "history": True
+                    }
+                
+                print(f"✅ Création nouveau profil backup pour {nom_profil}")
+            
+            # 5. Mettre à jour la section conversation_management
+            backup_profile["conversation_management"] = {
+                "words_enabled": words_enabled_var.get(),
+                "sentences_enabled": sentences_enabled_var.get(),
+                "tokens_enabled": tokens_enabled_var.get(),
+                "word_threshold": word_threshold_var.get(),
+                "sentence_threshold": sentence_threshold_var.get(),
+                "token_threshold": token_threshold_var.get(),
+                "summary_template": template_var.get(),
+                "custom_instructions": custom_instructions,
+                "auto_save": auto_save_var.get()
+            }
+            
+            # 6. Sauvegarder dans profiles_backup_conversation
+            os.makedirs("profiles_backup_conversation", exist_ok=True)
+            with open(backup_profile_path, 'w', encoding='utf-8') as f:
+                json.dump(backup_profile, f, indent=2, ensure_ascii=False)
+            
+            messagebox.showinfo("Succès", f"Configuration Setup History sauvegardée pour {nom_profil}\ndans profiles_backup_conversation")
+            setup_history_window.destroy()
+            logging.info(f"Configuration conversation_management sauvegardée: {backup_profile_path}")
                 
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde: {e}")
             logging.error(f"Erreur sauvegarde Setup History: {e}")
+            import traceback
+            traceback.print_exc()
     
     # === BOUTONS D'ACTION ===
     button_frame = ttk.Frame(scrollable_frame)
@@ -1941,13 +2145,31 @@ def open_setup_history_menu():
         command=setup_history_window.destroy
     ).pack(side="left")
     
+    # === FONCTIONS D'UPDATE ===
+    def on_template_change(*args):
+        """Fonction appelée quand le template change - charge la config et met à jour le preview"""
+        update_template_preview()
+        load_current_config()
+    
     # === INITIALISATION ===
     # Connecter les événements
-    template_var.trace_add("write", update_template_preview)
+    template_var.trace_add("write", on_template_change)
     
-    # Charger la configuration actuelle
+    # Initialiser l'affichage du profil et définir le template par défaut
+    update_profile_display()  
+    
+    # Définir le template initial basé sur le profil par défaut
+    profil_initial = config_manager.get_default_profile()
+    if profil_initial:
+        nom_profil_initial = profil_initial.get('name', 'Gemini')
+        template_var.set("Template par défaut")  # Commencer par défaut avec nouveau nom
+    
+    # Charger la configuration initiale
     load_current_config()
     update_template_preview()
+    
+    # Mettre à jour la liste des templates disponibles
+    template_combo['values'] = get_available_templates()
     
     # Configuration du scrolling
     main_canvas.pack(side="left", fill="both", expand=True)
@@ -1958,6 +2180,76 @@ def creer_interface():
     global root
     root = tk.Tk()
     root.title("ROB-1")
+
+    # === INITIALISATION DES PROFILS D'HISTORIQUE AU DÉMARRAGE ===
+    def initialiser_profils_historique():
+        """Crée les profils d'historique par défaut au démarrage"""
+        try:
+            backup_dir = "profiles_backup_conversation"
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # 1. Créer le profil d'historique par défaut s'il n'existe pas
+            default_profile_path = os.path.join(backup_dir, "default.json")
+            if not os.path.exists(default_profile_path):
+                default_profile = {
+                    "name": "default",
+                    "api_key": "",
+                    "history": True,
+                    "conversation_management": {
+                        "words_enabled": True,
+                        "sentences_enabled": True,
+                        "tokens_enabled": False,
+                        "word_threshold": 500,
+                        "sentence_threshold": 25,
+                        "token_threshold": 1000,
+                        "summary_template": "Template par défaut",
+                        "custom_instructions": "Résume la conversation précédente en conservant les points clés et le contexte important. Garde un ton professionnel et structure ton résumé de manière claire.",
+                        "auto_save": True
+                    }
+                }
+                
+                with open(default_profile_path, 'w', encoding='utf-8') as f:
+                    json.dump(default_profile, f, indent=2, ensure_ascii=False)
+                print(f"✅ Profil d'historique par défaut créé: {default_profile_path}")
+            
+            # 2. Créer les profils d'historique pour toutes les APIs configurées
+            try:
+                api_profiles = config_manager.list_profiles()
+                for api_name in api_profiles:
+                    api_profile_path = os.path.join(backup_dir, f"{api_name}.json")
+                    
+                    if not os.path.exists(api_profile_path):
+                        # Charger le profil API principal
+                        api_data = config_manager.load_profile(api_name)
+                        if api_data:
+                            # Créer le profil d'historique basé sur l'API
+                            history_profile = api_data.copy()
+                            
+                            # Ajouter/mettre à jour la section conversation_management
+                            history_profile["conversation_management"] = {
+                                "words_enabled": True,
+                                "sentences_enabled": True,
+                                "tokens_enabled": False,
+                                "word_threshold": 500,
+                                "sentence_threshold": 25,
+                                "token_threshold": 1000,
+                                "summary_template": f"Template {api_name}",
+                                "custom_instructions": f"Résume la conversation en utilisant le style et les préférences configurées pour {api_name}. Adapte le résumé au contexte et aux besoins spécifiques de cette API.",
+                                "auto_save": True
+                            }
+                            
+                            with open(api_profile_path, 'w', encoding='utf-8') as f:
+                                json.dump(history_profile, f, indent=2, ensure_ascii=False)
+                            print(f"✅ Profil d'historique créé pour {api_name}")
+            
+            except Exception as e:
+                print(f"⚠️  Erreur création profils API: {e}")
+                
+        except Exception as e:
+            print(f"❌ Erreur initialisation profils historique: {e}")
+    
+    # Initialiser les profils d'historique au démarrage
+    initialiser_profils_historique()
 
     # Gestion propre de la fermeture
     def on_closing():
