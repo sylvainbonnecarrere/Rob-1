@@ -1534,11 +1534,22 @@ def open_setup_menu():
         
         # Charger le template curl
         template_id = donnees_profil.get("template_id", "")
+        print(f"[DEBUG] Template ID trouvé: '{template_id}'")
         if template_id:
             template_content = config_manager.load_template(template_id)
-            curl_exe_var.set(template_content if template_content else "")
+            print(f"[DEBUG] Template content chargé: {len(template_content) if template_content else 0} caractères")
+            if template_content:
+                curl_exe_var.set(template_content)
+                print(f"[DEBUG] Template curl chargé avec succès pour {template_id}")
+            else:
+                # Fallback vers curl_exe si le template n'existe pas
+                fallback_curl = donnees_profil.get("curl_exe", "")
+                curl_exe_var.set(fallback_curl)
+                print(f"[DEBUG] Template vide, utilisation du fallback curl_exe: {len(fallback_curl)} caractères")
         else:
-            curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+            fallback_curl = donnees_profil.get("curl_exe", "")
+            curl_exe_var.set(fallback_curl)
+            print(f"[DEBUG] Pas de template_id, utilisation de curl_exe: {len(fallback_curl)} caractères")
         
         print(f"[DEBUG] Profil par défaut chargé avec succès: {profil_selectionne}")
     except Exception as e:
