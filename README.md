@@ -15,30 +15,29 @@ Ce projet applicatif vise à créer un système permettant de lancer et de gére
 2.  Utilisez les champs rôle et comportement pour créer un agent.
   Exemples : 
     Rôle : un professeur d'histoire de France - Comportement : rigoureux, pédagogue, cite des sources
+
     Rôle : un juriste expert en droit des affaires - Comportement : précis, intéressé, méticuleux
+    
     Rôle : un architecte développeur d'applications - Comportement : utilise bonnes pratiques et design pattern, force de proposition 
 
 ## Lancement
 
-### Méthode 1 : Lancement direct (première fois)
+### Méthode 1 : Lancement direct 
 
-Exécutez le script `main.py` :
+À la première installation, ouvrir une invite de commandes et éxécutez le script `main.py` :
 
 ```bash
 python main.py
 ```
+Cette commande peut être utilisée par la suite pour lancer l'appli.
 
 Lors du premier lancement, l'application créera automatiquement un lanceur adapté à votre système d'exploitation :
 - **Windows** : `RUN.bat` 
 - **Linux/macOS** : `run.sh` - Exécutez `./run.sh` dans le terminal
 
-### Méthode 2 : Utilisation d'une console
+### Méthode 2 : Une fois le lanceur créé
 
-Lancer la commande une invite de commande, puis exécutez
-
-```
-python main.py
-```
+Double cliquez sur le lanceur précédemment créé
 
 
 > 💡 **Note Windows** : Le lanceur utilise `pythonw` pour éviter l'affichage de la console Python en arrière-plan.
@@ -48,7 +47,7 @@ python main.py
 ./run.sh
 ```
 
-### Méthode 3 : Générateur de lanceur manuel
+### Méthode 3 : Regénérateur le lanceur
 
 Si vous souhaitez recréer le lanceur, utilisez :
 
