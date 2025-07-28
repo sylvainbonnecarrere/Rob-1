@@ -2,6 +2,7 @@
 ConversationManager - Gestionnaire intelligent d'historique avec résumé contextuel
 Version intégrée avec ConfigManager et indicateurs visuels
 Remplace la concaténation simple par une gestion intelligente des conversations
+Support tiktoken pour comptage précis des tokens
 """
 
 import json
@@ -10,6 +11,13 @@ import re
 import unicodedata
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
+
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+    logging.warning("tiktoken non disponible - comptage tokens désactivé")
 
 class ConversationManager:
     """
@@ -66,12 +74,41 @@ class ConversationManager:
         self.config = profile_config if profile_config else self.default_config
         self.config_manager = config_manager
         
-        # Seuils configurables avec fusion intelligente des configurations
-        self.words_threshold = self._get_config_value("summary_threshold", {}).get("words", self.default_config["summary_threshold"]["words"])
-        self.sentences_threshold = self._get_config_value("summary_threshold", {}).get("sentences", self.default_config["summary_threshold"]["sentences"])
-        self.summary_enabled = self._get_config_value("summary_enabled", self.default_config["summary_enabled"])
+        # Nouvelle gestion des seuils avec structure étendue
+        self.intelligent_management = self._get_config_value("intelligent_management", True)
+        
+        # Configuration des seuils selon la nouvelle structure
+        if self.intelligent_management and "summary_thresholds" in self.config:
+            # Nouvelle structure avec seuils configurables
+            thresholds = self.config["summary_thresholds"]
+            self.words_threshold = thresholds.get("words", {}).get("value", self.default_config["summary_threshold"]["words"])
+            self.sentences_threshold = thresholds.get("sentences", {}).get("value", self.default_config["summary_threshold"]["sentences"])
+            self.tokens_threshold = thresholds.get("tokens", {}).get("value", 1200)
+            
+            # Seuils activés/désactivés
+            self.words_enabled = thresholds.get("words", {}).get("enabled", True)
+            self.sentences_enabled = thresholds.get("sentences", {}).get("enabled", True)
+            self.tokens_enabled = thresholds.get("tokens", {}).get("enabled", False)
+        else:
+            # Fallback vers ancienne structure ou valeurs par défaut
+            old_threshold = self._get_config_value("summary_threshold", self.default_config["summary_threshold"])
+            self.words_threshold = old_threshold.get("words", self.default_config["summary_threshold"]["words"])
+            self.sentences_threshold = old_threshold.get("sentences", self.default_config["summary_threshold"]["sentences"])
+            self.tokens_threshold = 1200
+            
+            # Par défaut, mots et phrases activés
+            self.words_enabled = True
+            self.sentences_enabled = True
+            self.tokens_enabled = False
+        
         self.show_indicators = self._get_config_value("show_indicators", self.default_config["show_indicators"])
         self.template_id = self._get_config_value("summary_template_id", self.default_config["summary_template_id"])
+        
+        # Instructions personnalisées pour le résumé
+        self.custom_instructions = self._get_config_value("custom_instructions", "")
+        
+        # Initialisation tiktoken pour comptage des tokens
+        self.token_encoder = self._get_token_encoder()
         
         # État de la conversation
         self.conversation_history: List[Dict[str, str]] = []
@@ -79,7 +116,8 @@ class ConversationManager:
         self.summary_count = 0
         self.logger = logging.getLogger(__name__)
         
-        self.logger.info(f"ConversationManager initialisé pour API '{self.api_type}' - Seuils: {self.words_threshold} mots / {self.sentences_threshold} phrases")
+        tokens_info = f" / {self.tokens_threshold} tokens" if self.tokens_enabled else ""
+        self.logger.info(f"ConversationManager initialisé pour API '{self.api_type}' - Seuils: {self.words_threshold} mots / {self.sentences_threshold} phrases{tokens_info}")
     
     def _get_config_value(self, key: str, default_value: Any) -> Any:
         """
@@ -98,6 +136,41 @@ class ConversationManager:
         
         # Enfin la valeur par défaut fournie
         return default_value
+    
+    def _get_token_encoder(self):
+        """
+        Retourne l'encodeur tiktoken approprié selon l'API
+        """
+        if not TIKTOKEN_AVAILABLE:
+            return None
+        
+        # Encodeurs selon l'API
+        encoders = {
+            "openai": "cl100k_base",    # GPT-4, ChatGPT
+            "claude": "cl100k_base",    # Approximation pour Claude
+            "gemini": "cl100k_base",    # Approximation pour Gemini
+            "default": "cl100k_base"
+        }
+        
+        try:
+            encoding_name = encoders.get(self.api_type, "cl100k_base")
+            return tiktoken.get_encoding(encoding_name)
+        except Exception as e:
+            self.logger.warning(f"Erreur initialisation tiktoken: {e}")
+            return None
+    
+    def _count_tokens(self, text: str) -> int:
+        """
+        Compte les tokens dans le texte avec tiktoken
+        """
+        if not self.token_encoder or not text:
+            return 0
+        
+        try:
+            return len(self.token_encoder.encode(text))
+        except Exception as e:
+            self.logger.warning(f"Erreur comptage tokens: {e}")
+            return 0
     
     def _clean_text_for_api(self, text: str) -> str:
         """
@@ -212,10 +285,42 @@ class ConversationManager:
     def should_summarize(self) -> bool:
         """
         Vérifie si un résumé est nécessaire selon les seuils configurés
+        Nouvelle logique : Premier seuil activé atteint = déclenchement
         """
-        if not self.summary_enabled:
-            return False
+        # Si la gestion intelligente est désactivée, utiliser la logique par défaut
+        if not self.intelligent_management:
+            return self._should_summarize_default()
         
+        # Récupérer les statistiques actuelles
+        stats = self.get_stats()
+        current_words = stats["total_words"]
+        current_sentences = stats["total_sentences"]
+        current_tokens = stats.get("total_tokens", 0)
+        
+        # Vérifier chaque seuil activé (logique OU)
+        reasons = []
+        
+        if self.words_enabled and current_words >= self.words_threshold:
+            reasons.append(f"mots: {current_words}/{self.words_threshold}")
+        
+        if self.sentences_enabled and current_sentences >= self.sentences_threshold:
+            reasons.append(f"phrases: {current_sentences}/{self.sentences_threshold}")
+        
+        if self.tokens_enabled and current_tokens >= self.tokens_threshold:
+            reasons.append(f"tokens: {current_tokens}/{self.tokens_threshold}")
+        
+        should_summarize = len(reasons) > 0
+        
+        if should_summarize:
+            self.logger.info(f"Seuil(s) atteint(s) ({', '.join(reasons)}) - Résumé nécessaire")
+        
+        return should_summarize
+    
+    def _should_summarize_default(self) -> bool:
+        """
+        Logique de résumé par défaut (ancienne méthode)
+        Utilisée quand la gestion intelligente est désactivée
+        """
         current_words = self.get_current_history_word_count()
         current_sentences = self.get_current_history_sentence_count()
         
@@ -231,7 +336,7 @@ class ConversationManager:
             if sentences_exceeded:
                 reason.append(f"phrases: {current_sentences}/{self.sentences_threshold}")
             
-            self.logger.info(f"Seuil atteint ({', '.join(reason)}) - Résumé nécessaire")
+            self.logger.info(f"Seuil par défaut atteint ({', '.join(reason)}) - Résumé nécessaire")
         
         return should_summarize
     
@@ -381,21 +486,82 @@ RÉSUMÉ CONTEXTUEL :"""
         """
         current_words = self.get_current_history_word_count()
         current_sentences = self.get_current_history_sentence_count()
+        current_tokens = self._get_current_history_token_count()
         
-        return {
+        stats = {
             'total_words': current_words,
             'words_threshold': self.words_threshold,
+            'words_enabled': getattr(self, 'words_enabled', True),
             'total_sentences': current_sentences,
             'sentences_threshold': self.sentences_threshold,
+            'sentences_enabled': getattr(self, 'sentences_enabled', True),
+            'total_tokens': current_tokens,
+            'tokens_threshold': self.tokens_threshold,
+            'tokens_enabled': getattr(self, 'tokens_enabled', False),
             'summary_count': self.summary_count,
             'messages_count': len(self.conversation_history),
             'has_summary': self.current_summary is not None,
-            'words_percentage': (current_words / self.words_threshold) * 100,
-            'sentences_percentage': (current_sentences / self.sentences_threshold) * 100,
-            'next_summary_needed': self.should_summarize(),
-            'summary_enabled': self.summary_enabled,
+            'intelligent_management': getattr(self, 'intelligent_management', True),
             'show_indicators': self.show_indicators
         }
+        
+        # Calculer les pourcentages seulement pour les seuils activés
+        if stats['words_enabled']:
+            stats['words_percentage'] = (current_words / self.words_threshold) * 100
+        
+        if stats['sentences_enabled']:
+            stats['sentences_percentage'] = (current_sentences / self.sentences_threshold) * 100
+            
+        if stats['tokens_enabled'] and self.tokens_threshold > 0:
+            stats['tokens_percentage'] = (current_tokens / self.tokens_threshold) * 100
+        
+        # CORRECTION: Calculer next_summary_needed directement sans appeler should_summarize()
+        # pour éviter la récursion infinie
+        stats['next_summary_needed'] = self._check_thresholds_exceeded(stats)
+        
+        return stats
+    
+    def _check_thresholds_exceeded(self, stats: Dict[str, Any]) -> bool:
+        """
+        Vérifie si les seuils sont dépassés sans récursion
+        """
+        if not getattr(self, 'intelligent_management', True):
+            # Logique par défaut simple
+            words_exceeded = stats['total_words'] >= self.words_threshold
+            sentences_exceeded = stats['total_sentences'] >= self.sentences_threshold
+            return words_exceeded or sentences_exceeded
+        
+        # Vérifier chaque seuil activé
+        if stats.get('words_enabled', False) and stats['total_words'] >= self.words_threshold:
+            return True
+        
+        if stats.get('sentences_enabled', False) and stats['total_sentences'] >= self.sentences_threshold:
+            return True
+        
+        if stats.get('tokens_enabled', False) and stats['total_tokens'] >= self.tokens_threshold:
+            return True
+        
+        return False
+    
+    def _get_current_history_token_count(self) -> int:
+        """
+        Compte le nombre de tokens dans l'historique actuel
+        """
+        if not self.tokens_enabled or not self.token_encoder:
+            return 0
+        
+        total_tokens = 0
+        
+        # Compter les tokens du résumé s'il existe
+        if self.current_summary:
+            total_tokens += self._count_tokens(self.current_summary)
+        
+        # Compter les tokens de chaque message
+        for message in self.conversation_history:
+            for part in message.get('parts', []):
+                total_tokens += self._count_tokens(part.get('text', ''))
+        
+        return total_tokens
     
     def get_status_indicator(self) -> str:
         """
@@ -438,6 +604,20 @@ RÉSUMÉ CONTEXTUEL :"""
         self.current_summary = None
         self.summary_count = 0
         self.logger.info("Conversation réinitialisée")
+    
+    def get_custom_instructions(self) -> str:
+        """
+        Retourne les instructions personnalisées pour le résumé
+        """
+        return self.custom_instructions
+    
+    def set_custom_instructions(self, instructions: str) -> None:
+        """
+        Définit les instructions personnalisées pour le résumé
+        """
+        self.custom_instructions = instructions
+        self.config["custom_instructions"] = instructions
+        self.logger.info(f"Instructions personnalisées mises à jour: {instructions[:50]}...")
 
 
 # Fonction simulée pour les tests (à remplacer par l'intégration réelle)

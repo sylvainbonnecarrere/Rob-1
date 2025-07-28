@@ -1,3 +1,4 @@
 charset_normalizer
 PyYAML
 tkinter
+tiktoken>=0.5.0

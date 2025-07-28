@@ -36,6 +36,9 @@ os.makedirs(DEVELOPMENT_DIR, exist_ok=True)
 # Initialiser le gestionnaire de configuration JSON
 config_manager = ConfigManager(".")
 
+# Initialiser le gestionnaire de conversation (sera configuré via Setup History)
+conversation_manager = None
+
 # Générer le profil système au démarrage
 generate_system_profile_at_startup(".")
 
@@ -1659,6 +1662,297 @@ def open_setup_file_menu():
     update_panels()
     update_button_state()
 
+def open_setup_history_menu():
+    """
+    Interface Setup History - Gestion intelligente des conversations
+    Intègre le ConversationManager avec tiktoken pour une gestion avancée
+    """
+    global conversation_manager, config_manager
+    
+    # Créer la fenêtre principale
+    setup_history_window = Toplevel(root)
+    setup_history_window.title("🕐 Setup History - Gestion Intelligente des Conversations")
+    setup_history_window.geometry("900x700")
+    setup_history_window.resizable(True, True)
+    
+    # Variables pour l'interface
+    # Variables pour les modes de déclenchement (checkboxes multiples)
+    words_enabled_var = tk.BooleanVar(value=True)
+    sentences_enabled_var = tk.BooleanVar(value=True) 
+    tokens_enabled_var = tk.BooleanVar(value=True)
+    word_threshold_var = tk.IntVar(value=500)
+    sentence_threshold_var = tk.IntVar(value=25)
+    token_threshold_var = tk.IntVar(value=1000)
+    template_var = tk.StringVar(value="défaut")  # Valeur par défaut
+    auto_save_var = tk.BooleanVar(value=True)
+    
+    # Frame principal avec scrollbar
+    main_canvas = tk.Canvas(setup_history_window)
+    scrollbar = ttk.Scrollbar(setup_history_window, orient="vertical", command=main_canvas.yview)
+    scrollable_frame = ttk.Frame(main_canvas)
+    
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+    )
+    
+    main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    main_canvas.configure(yscrollcommand=scrollbar.set)
+    
+    # === SECTION 1: CONFIGURATION DES SEUILS ===
+    section1 = ttk.LabelFrame(scrollable_frame, text="⚖️ Configuration des Seuils", padding=15)
+    section1.pack(fill="x", padx=20, pady=10)
+    
+    # Mode de seuil
+    threshold_mode_frame = ttk.Frame(section1)
+    threshold_mode_frame.pack(fill="x", pady=(0, 15))
+    
+    ttk.Label(threshold_mode_frame, text="Types de seuils actifs:", font=("Arial", 10, "bold")).pack(anchor="w")
+    
+    modes_frame = ttk.Frame(threshold_mode_frame)
+    modes_frame.pack(fill="x", pady=(5, 0))
+    
+    ttk.Checkbutton(modes_frame, text="Contrôler par nombre de mots", variable=words_enabled_var).pack(anchor="w")
+    ttk.Checkbutton(modes_frame, text="Contrôler par nombre de phrases", variable=sentences_enabled_var).pack(anchor="w")
+    ttk.Checkbutton(modes_frame, text="Contrôler par nombre de tokens", variable=tokens_enabled_var).pack(anchor="w")
+    
+    # Configuration des seuils individuels
+    thresholds_frame = ttk.Frame(section1)
+    thresholds_frame.pack(fill="x", pady=(10, 0))
+    
+    # Seuil de mots
+    word_frame = ttk.Frame(thresholds_frame)
+    word_frame.pack(fill="x", pady=5)
+    ttk.Label(word_frame, text="Seuil de mots:", width=15).pack(side="left")
+    word_spinbox = tk.Spinbox(word_frame, from_=100, to=2000, textvariable=word_threshold_var, width=10)
+    word_spinbox.pack(side="left", padx=(10, 5))
+    ttk.Label(word_frame, text="(100-2000)", font=("Arial", 8, "italic")).pack(side="left")
+    
+    # Seuil de phrases
+    sentence_frame = ttk.Frame(thresholds_frame)
+    sentence_frame.pack(fill="x", pady=5)
+    ttk.Label(sentence_frame, text="Seuil de phrases:", width=15).pack(side="left")
+    sentence_spinbox = tk.Spinbox(sentence_frame, from_=10, to=100, textvariable=sentence_threshold_var, width=10)
+    sentence_spinbox.pack(side="left", padx=(10, 5))
+    ttk.Label(sentence_frame, text="(10-100)", font=("Arial", 8, "italic")).pack(side="left")
+    
+    # Seuil de tokens
+    token_frame = ttk.Frame(thresholds_frame)
+    token_frame.pack(fill="x", pady=5)
+    ttk.Label(token_frame, text="Seuil de tokens:", width=15).pack(side="left")
+    token_spinbox = tk.Spinbox(token_frame, from_=500, to=4000, textvariable=token_threshold_var, width=10)
+    token_spinbox.pack(side="left", padx=(10, 5))
+    ttk.Label(token_frame, text="(500-4000)", font=("Arial", 8, "italic")).pack(side="left")
+    
+    # === SECTION 2: TEMPLATES DE RÉSUMÉ ===
+    section2 = ttk.LabelFrame(scrollable_frame, text="📄 Templates de Résumé", padding=15)
+    section2.pack(fill="x", padx=20, pady=10)
+    
+    # Sélection du template
+    template_frame = ttk.Frame(section2)
+    template_frame.pack(fill="x", pady=(0, 10))
+    
+    ttk.Label(template_frame, text="Template de résumé:", font=("Arial", 10, "bold")).pack(anchor="w")
+    
+    # Récupérer les templates disponibles depuis les APIs
+    def get_available_templates():
+        templates = ["défaut"]  # Template par défaut toujours disponible
+        try:
+            # Récupérer la liste des profils API
+            profiles = config_manager.list_profiles()
+            for profile_name in profiles:
+                profile_data = config_manager.load_profile(profile_name)
+                if profile_data and profile_data.get('history', False):  # Si history activé
+                    templates.append(f"Template {profile_name}")
+        except Exception as e:
+            print(f"Erreur récupération templates: {e}")
+        return templates
+    
+    template_combo = ttk.Combobox(template_frame, textvariable=template_var, state="readonly", width=40)
+    template_combo['values'] = get_available_templates()
+    template_combo.pack(anchor="w", pady=(5, 0))
+    
+    # Instructions personnalisées pour le résumé
+    preview_frame = ttk.Frame(section2)
+    preview_frame.pack(fill="x", pady=(10, 0))
+    
+    ttk.Label(preview_frame, text="Instructions pour le résumé (éditable):", font=("Arial", 9, "bold")).pack(anchor="w")
+    
+    # Note explicative
+    help_label = ttk.Label(preview_frame, text="Ces instructions seront envoyées à l'API pour générer le résumé dans Test API", 
+                          font=("Arial", 8, "italic"), foreground="gray")
+    help_label.pack(anchor="w", pady=(2, 5))
+    
+    # Zone de texte éditable pour les instructions personnalisées
+    template_preview = tk.Text(
+        preview_frame, 
+        height=4, 
+        wrap=tk.WORD, 
+        bg="white",  # Fond blanc pour montrer que c'est éditable
+        relief="solid", 
+        borderwidth=1,
+        font=("Arial", 9)
+    )
+    template_preview.pack(fill="x", pady=(5, 0))
+    
+    # Variable pour stocker les instructions personnalisées
+    custom_instructions_var = tk.StringVar()
+    
+    # === FONCTIONS D'UPDATE ===
+    def update_template_preview(*args):
+        """Charge les instructions par défaut selon le template sélectionné"""
+        selected_template = template_var.get()
+        
+        # Instructions par défaut selon le template choisi
+        if selected_template == "défaut":
+            default_instructions = "Résume la conversation précédente en conservant les points clés et le contexte important. Garde un ton professionnel et structure ton résumé de manière claire."
+        elif selected_template.startswith("Template "):
+            # Template d'une API spécifique
+            api_name = selected_template.replace("Template ", "")
+            default_instructions = f"Résume la conversation en utilisant le style et les préférences configurées pour {api_name}. Adapte le résumé au contexte et aux besoins spécifiques de cette API."
+        else:
+            default_instructions = "Résume la conversation précédente."
+        
+        # Charger les instructions par défaut seulement si le champ est vide
+        current_content = template_preview.get("1.0", tk.END).strip()
+        if not current_content:
+            template_preview.delete("1.0", tk.END)
+            template_preview.insert("1.0", default_instructions)
+    
+    def get_custom_instructions():
+        """Récupère les instructions personnalisées saisies par l'utilisateur"""
+        return template_preview.get("1.0", tk.END).strip()
+    
+    def set_custom_instructions(instructions):
+        """Définit les instructions personnalisées dans le textarea"""
+        template_preview.delete("1.0", tk.END)
+        template_preview.insert("1.0", instructions)
+    
+    
+    def load_current_config():
+        """Charge la configuration actuelle depuis le ConversationManager"""
+        global conversation_manager
+        try:
+            if conversation_manager:
+                # Charger les paramètres depuis conversation_manager
+                # Note: Pas besoin de checkbox activation - c'est automatique si history activé
+                
+                # Charger les seuils depuis le config du ConversationManager
+                config = conversation_manager.config
+                word_threshold_var.set(config.get("word_threshold", 500))
+                sentence_threshold_var.set(config.get("sentence_threshold", 25))
+                token_threshold_var.set(config.get("token_threshold", 1000))
+                
+                # Charger les modes actifs depuis la configuration
+                words_enabled_var.set(config.get("words_enabled", True))
+                sentences_enabled_var.set(config.get("sentences_enabled", True))
+                tokens_enabled_var.set(config.get("tokens_enabled", True))
+                
+                # Charger le template sélectionné et ses instructions
+                template_var.set(config.get("summary_template", "défaut"))
+                
+                # Charger les instructions personnalisées si elles existent
+                custom_instructions = config.get("custom_instructions", "")
+                if custom_instructions:
+                    set_custom_instructions(custom_instructions)
+                else:
+                    # Charger les instructions par défaut
+                    update_template_preview()
+                
+        except Exception as e:
+            messagebox.showwarning("Avertissement", f"Erreur lors du chargement de la configuration: {e}")
+    
+    def save_configuration():
+        """Sauvegarde la configuration des préférences Setup History dans le profil"""
+        global conversation_manager
+        
+        try:
+            # 1. Toujours mettre à jour/créer le ConversationManager avec les nouveaux paramètres
+            # Note: L'activation dépend de l'option 'history' dans Set up API, pas d'ici
+            
+            # Récupérer les instructions personnalisées saisies par l'utilisateur
+            custom_instructions = get_custom_instructions()
+            
+            config_conv = {
+                "word_threshold": word_threshold_var.get(),
+                "sentence_threshold": sentence_threshold_var.get(),
+                "token_threshold": token_threshold_var.get(),
+                "words_enabled": words_enabled_var.get(),
+                "sentences_enabled": sentences_enabled_var.get(),
+                "tokens_enabled": tokens_enabled_var.get(),
+                "summary_template": template_var.get(),
+                "custom_instructions": custom_instructions
+            }
+            
+            if not conversation_manager:
+                conversation_manager = ConversationManager(config_conv)
+            else:
+                # Mettre à jour la configuration existante
+                conversation_manager.config.update(config_conv)
+            
+            # 2. Sauvegarder dans le profil via ConfigManager
+            profil_actuel = config_manager.get_default_profile()
+            if profil_actuel:
+                # Ajouter/mettre à jour la section conversation_management
+                profil_actuel["conversation_management"] = {
+                    "words_enabled": words_enabled_var.get(),
+                    "sentences_enabled": sentences_enabled_var.get(),
+                    "tokens_enabled": tokens_enabled_var.get(),
+                    "word_threshold": word_threshold_var.get(),
+                    "sentence_threshold": sentence_threshold_var.get(),
+                    "token_threshold": token_threshold_var.get(),
+                    "summary_template": template_var.get(),
+                    "custom_instructions": custom_instructions,
+                    "auto_save": auto_save_var.get()
+                }
+                
+                # Sauvegarder le profil
+                nom_profil = profil_actuel.get('name', 'Gemini')
+                success = config_manager.save_profile(nom_profil, profil_actuel)
+                
+                if success:
+                    messagebox.showinfo("Succès", f"Configuration Setup History sauvegardée pour {nom_profil}")
+                    setup_history_window.destroy()
+                    logging.info(f"Configuration conversation_management mise à jour pour {nom_profil}")
+                else:
+                    messagebox.showerror("Erreur", "Erreur lors de la sauvegarde de la configuration")
+            else:
+                messagebox.showerror("Erreur", "Impossible de charger le profil actuel")
+                
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde: {e}")
+            logging.error(f"Erreur sauvegarde Setup History: {e}")
+    
+    # === BOUTONS D'ACTION ===
+    button_frame = ttk.Frame(scrollable_frame)
+    button_frame.pack(fill="x", padx=20, pady=20)
+    
+    # Bouton Sauvegarder
+    ttk.Button(
+        button_frame, 
+        text="💾 Sauvegarder", 
+        command=save_configuration
+    ).pack(side="left", padx=(0, 10))
+    
+    # Bouton Annuler
+    ttk.Button(
+        button_frame, 
+        text="❌ Annuler", 
+        command=setup_history_window.destroy
+    ).pack(side="left")
+    
+    # === INITIALISATION ===
+    # Connecter les événements
+    template_var.trace_add("write", update_template_preview)
+    
+    # Charger la configuration actuelle
+    load_current_config()
+    update_template_preview()
+    
+    # Configuration du scrolling
+    main_canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
 def creer_interface():
     """Crée l'interface graphique principale avec une barre de menu."""
     global root
@@ -1683,6 +1977,7 @@ def creer_interface():
     menu_api.add_command(label="Test API", command=ouvrir_fenetre_apitest)
     menu_api.add_command(label="Set up API", command=open_setup_menu)
     menu_api.add_command(label="Set up File", command=open_setup_file_menu)
+    menu_api.add_command(label="Setup History", command=open_setup_history_menu)
     menu_bar.add_cascade(label="API", menu=menu_api)
 
     # Configuration de la barre de menu

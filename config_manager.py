@@ -49,12 +49,31 @@ PROFILE_SCHEMA = {
         "conversation": {
             "type": "object",
             "properties": {
-                "summary_enabled": {"type": "boolean"},
-                "summary_threshold": {
+                "intelligent_management": {"type": "boolean"},
+                "summary_thresholds": {
                     "type": "object",
                     "properties": {
-                        "words": {"type": "integer"},
-                        "sentences": {"type": "integer"}
+                        "words": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {"type": "boolean"},
+                                "value": {"type": "integer"}
+                            }
+                        },
+                        "sentences": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {"type": "boolean"},
+                                "value": {"type": "integer"}
+                            }
+                        },
+                        "tokens": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {"type": "boolean"},
+                                "value": {"type": "integer"}
+                            }
+                        }
                     }
                 },
                 "summary_template_id": {"type": "string"},
@@ -311,11 +330,13 @@ class ConfigManager:
             
             # Ajouter la configuration de conversation si elle n'existe pas
             if 'conversation' not in profile:
+                # Nouvelle structure de configuration
                 profile['conversation'] = {
-                    "summary_enabled": True,
-                    "summary_threshold": {
-                        "words": 300,
-                        "sentences": 6
+                    "intelligent_management": True,
+                    "summary_thresholds": {
+                        "words": {"enabled": True, "value": 300},
+                        "sentences": {"enabled": True, "value": 6},
+                        "tokens": {"enabled": False, "value": 1200}
                     },
                     "summary_template_id": "default_summary",
                     "show_indicators": True
@@ -332,4 +353,133 @@ class ConfigManager:
                 
         except Exception as e:
             self.logger.error(f"Erreur mise à jour profil {profile_name}: {e}")
+            return False
+
+    def update_conversation_config(self, profile_name: str, conversation_config: Dict[str, Any]) -> bool:
+        """
+        Met à jour la configuration de conversation d'un profil
+        """
+        try:
+            profile = self.load_profile(profile_name)
+            if not profile:
+                self.logger.error(f"Profil {profile_name} non trouvé")
+                return False
+            
+            # Valider la configuration conversation
+            if not self._validate_conversation_config(conversation_config):
+                self.logger.error("Configuration conversation invalide")
+                return False
+            
+            # Mettre à jour la configuration
+            profile['conversation'] = conversation_config
+            
+            # Sauvegarder
+            success = self.save_profile(profile_name, profile)
+            if success:
+                self.logger.info(f"Configuration conversation mise à jour pour {profile_name}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Erreur mise à jour conversation config: {e}")
+            return False
+
+    def get_conversation_config(self, profile_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Récupère la configuration de conversation d'un profil
+        """
+        try:
+            profile = self.load_profile(profile_name)
+            if not profile:
+                return None
+            
+            return profile.get('conversation')
+            
+        except Exception as e:
+            self.logger.error(f"Erreur récupération conversation config: {e}")
+            return None
+
+    def list_summary_templates(self) -> List[str]:
+        """
+        Liste tous les templates de résumé disponibles
+        """
+        try:
+            templates_dir = os.path.join(self.base_path, "templates", "conversation")
+            if not os.path.exists(templates_dir):
+                return ["default_summary"]
+            
+            templates = []
+            for file in os.listdir(templates_dir):
+                if file.endswith('.txt'):
+                    template_id = file[:-4]  # Retirer l'extension .txt
+                    templates.append(template_id)
+            
+            return templates if templates else ["default_summary"]
+            
+        except Exception as e:
+            self.logger.error(f"Erreur listage templates: {e}")
+            return ["default_summary"]
+
+    def load_summary_template(self, template_id: str) -> Optional[str]:
+        """
+        Charge le contenu d'un template de résumé
+        """
+        try:
+            template_path = os.path.join(self.base_path, "templates", "conversation", f"{template_id}.txt")
+            if not os.path.exists(template_path):
+                self.logger.warning(f"Template {template_id} non trouvé")
+                return None
+            
+            with open(template_path, 'r', encoding='utf-8') as f:
+                return f.read()
+                
+        except Exception as e:
+            self.logger.error(f"Erreur chargement template {template_id}: {e}")
+            return None
+
+    def save_summary_template(self, template_id: str, content: str) -> bool:
+        """
+        Sauvegarde un template de résumé
+        """
+        try:
+            templates_dir = os.path.join(self.base_path, "templates", "conversation")
+            os.makedirs(templates_dir, exist_ok=True)
+            
+            template_path = os.path.join(templates_dir, f"{template_id}.txt")
+            with open(template_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            self.logger.info(f"Template {template_id} sauvegardé")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Erreur sauvegarde template {template_id}: {e}")
+            return False
+
+    def _validate_conversation_config(self, config: Dict[str, Any]) -> bool:
+        """
+        Valide une configuration de conversation
+        """
+        try:
+            required_keys = ['intelligent_management', 'summary_thresholds', 'summary_template_id', 'show_indicators']
+            
+            # Vérifier les clés obligatoires
+            for key in required_keys:
+                if key not in config:
+                    return False
+            
+            # Vérifier la structure des seuils
+            thresholds = config.get('summary_thresholds', {})
+            for threshold_type in ['words', 'sentences', 'tokens']:
+                if threshold_type in thresholds:
+                    threshold_config = thresholds[threshold_type]
+                    if not isinstance(threshold_config, dict):
+                        return False
+                    if 'enabled' not in threshold_config or 'value' not in threshold_config:
+                        return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Erreur validation conversation config: {e}")
             return False
