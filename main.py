@@ -1,169 +1,78 @@
 import logging
 import os
-import yaml
 import subprocess
 from gui import creer_interface
 
-# Importation pour la création du lanceur OS-spécifique
+# Importation pour la création du lanceur OS-spécifique  
 import sys
 import platform
 import stat
 
-# Modification de la configuration des logs pour inclure la console
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("application.log"),
-        logging.StreamHandler()  # Ajout d'un gestionnaire pour afficher les logs dans la console
-    ]
-)
+# Configuration des logs avec gestion d'erreurs
+try:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler("application.log", encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+except Exception as e:
+    print(f"Attention: Impossible de configurer les logs - {e}")
 
+# Création des dossiers essentiels
 PROFILES_DIR = "profiles"
 CONVERSATIONS_DIR = "conversations"
-os.makedirs(PROFILES_DIR, exist_ok=True)
-os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
+TEMPLATES_DIR = "templates"
 
-def creer_fichiers_configuration():
-    """Crée les fichiers de configuration pour Gemini, OpenAI et Claude."""
-    configurations = {
-        "Gemini": {
-            "profil": "Gemini",
-            "nom": "Gemini",
-            "api_key": "",
-            "api_url": "",
-            "behavior": "",
-            "curl_exe": "",
-            "default": False,
-            "history": False,
-            "role": "",
-            "file_generation": {
-                "enabled": False,
-                "mode": "simple",
-                "simple_config": {
-                    "include_question": True,
-                    "include_response": True,
-                    "base_filename": "conversation",
-                    "same_file": True
-                },
-                "dev_config": {
-                    "extension": ".py"
-                }
-            }
-        },
-        "OpenAI": {
-            "profil": "OpenAI",
-            "nom": "OpenAI",
-            "api_key": "",
-            "api_url": "",
-            "behavior": "",
-            "curl_exe": "",
-            "default": False,
-            "history": False,
-            "role": "",
-            "file_generation": {
-                "enabled": False,
-                "mode": "simple",
-                "simple_config": {
-                    "include_question": True,
-                    "include_response": True,
-                    "base_filename": "conversation",
-                    "same_file": True
-                },
-                "dev_config": {
-                    "extension": ".py"
-                }
-            }
-        },
-        "Claude": {
-            "profil": "Claude",
-            "nom": "Claude",
-            "api_key": "",
-            "api_url": "",
-            "behavior": "",
-            "curl_exe": "",
-            "default": False,
-            "history": False,
-            "role": "",
-            "file_generation": {
-                "enabled": False,
-                "mode": "simple",
-                "simple_config": {
-                    "include_question": True,
-                    "include_response": True,
-                    "base_filename": "conversation",
-                    "same_file": True
-                },
-                "dev_config": {
-                    "extension": ".py"
-                }
-            }
-        }
-    }
+try:
+    os.makedirs(PROFILES_DIR, exist_ok=True)
+    os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
+    os.makedirs(TEMPLATES_DIR, exist_ok=True)
+    os.makedirs(os.path.join(TEMPLATES_DIR, "api_commands"), exist_ok=True)
+    os.makedirs(os.path.join(TEMPLATES_DIR, "chat"), exist_ok=True)
+    print("✅ Dossiers système créés avec succès")
+except Exception as e:
+    print(f"⚠️ Erreur création dossiers: {e}")
 
-    for nom, config in configurations.items():
-        chemin_fichier = os.path.join(PROFILES_DIR, f"{nom}.yaml")
-        if not os.path.exists(chemin_fichier):
-            try:
-                with open(chemin_fichier, 'w') as fichier:
-                    yaml.dump(config, fichier)
-                print(f"Fichier de configuration créé : {chemin_fichier}")
-            except Exception as e:
-                print(f"Erreur lors de la création du fichier {chemin_fichier} : {e}")
+def initialisation_premier_lancement():
+    """Initialisation complète pour le premier lancement de l'application"""
+    try:
+        # Import du ConfigManager pour la gestion JSON
+        from config_manager import ConfigManager
+        
+        # Initialiser le gestionnaire de configuration
+        config_manager = ConfigManager(".")
+        
+        # Créer les profils par défaut via ConfigManager (JSON)
+        config_manager.create_default_profiles()
+        
+        print("✅ Configuration par défaut initialisée (système JSON)")
+        return True
+        
+    except ImportError as e:
+        print(f"❌ Erreur import ConfigManager: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Erreur initialisation: {e}")
+        return False
 
-def verifier_profil_gemini():
-    """Vérifie si le profil Gemini existe, sinon le crée avec des valeurs par défaut."""
-    gemini_profile_path = os.path.join(PROFILES_DIR, "Gemini.yaml")
-
-    if not os.path.exists(gemini_profile_path):
-        gemini_default_config = {
-            "model": "Gemini",
-            "api_url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-            "api_key": "VOTRE_CLE_API_GEMINI_ICI",
-            "behavior": "comportement initial",
-            "history": False
-        }
-
-        try:
-            with open(gemini_profile_path, 'w') as f:
-                yaml.dump(gemini_default_config, f)
-            print(f"Profil Gemini créé avec succès : {gemini_profile_path}")
-        except Exception as e:
-            print(f"Erreur lors de la création du profil Gemini : {e}")
-
-def verifier_et_mettre_a_jour_profils():
-    """Vérifie et met à jour les profils pour inclure la clé 'default'."""
-    configurations = {
-        "Gemini": {
-            "default": True
-        },
-        "OpenAI": {
-            "default": False
-        },
-        "Claude": {
-            "default": False
-        }
-    }
-
-    for nom, config_update in configurations.items():
-        chemin_fichier = os.path.join(PROFILES_DIR, f"{nom}.yaml")
-        if os.path.exists(chemin_fichier):
-            try:
-                with open(chemin_fichier, 'r') as fichier:
-                    config = yaml.safe_load(fichier)
-
-                # Mettre à jour la clé 'default'
-                config.update(config_update)
-
-                with open(chemin_fichier, 'w') as fichier:
-                    yaml.dump(config, fichier)
-                print(f"Profil {nom} mis à jour avec la clé 'default'.")
-            except Exception as e:
-                print(f"Erreur lors de la mise à jour du profil {nom} : {e}")
-
-def verifier_ou_demander_cle_api():
-    """Supprimé : La clé API sera configurée via le formulaire SETUP."""
-    pass
+def verifier_installation_curl():
+    """Vérifie si curl est installé et accessible dans le système"""
+    try:
+        result = subprocess.run(['curl', '--version'], capture_output=True, text=True, check=True)
+        print("✅ Curl installé et accessible")
+        return True
+    except subprocess.CalledProcessError:
+        print("⚠️ Curl non trouvé - Installation recommandée pour compatibilité maximale")
+        return False
+    except FileNotFoundError:
+        print("⚠️ Curl non trouvé - Installation recommandée pour compatibilité maximale") 
+        return False
+    except Exception as e:
+        print(f"⚠️ Erreur vérification curl: {e}")
+        return False
 
 def execute_curl():
     curl_command = [
@@ -222,7 +131,7 @@ REM Changer vers le répertoire du script
 cd /d "%~dp0"
 
 REM Vérifier que Python est disponible
-python --version >nul 2>&1
+python --version >nul 2>nul
 if errorlevel 1 (
     echo ❌ Python n'est pas installé ou pas dans le PATH
     echo 💡 Veuillez installer Python depuis https://python.org
@@ -340,23 +249,37 @@ def ensure_templates_installed():
 
 def main():
     """Point d'entrée principal de l'application."""
-    logging.info("Application démarrée.")
-    # Ajout d'un log pour indiquer le lancement initial de l'application
-    logging.info("Lancement initial de l'application.")
+    logging.info("🚀 Application Rob-1 V2 démarrée")
     
-    # S'assurer que les templates API sont correctement installés
+    # === INITIALISATION PREMIER LANCEMENT ===
+    print("📋 Initialisation système...")
+    
+    # 1. Initialisation configuration par défaut
+    if not initialisation_premier_lancement():
+        print("❌ Échec initialisation - L'application va continuer avec les paramètres disponibles")
+    
+    # 2. Vérification curl (pour mode curl par défaut)
+    verifier_installation_curl()
+    
+    # 3. S'assurer que les templates API sont correctement installés
+    print("📁 Vérification templates...")
     ensure_templates_installed()
     
-    # Créer le lanceur OS-spécifique au premier lancement
+    # 4. Créer le lanceur OS-spécifique au premier lancement
+    print("🔧 Configuration lanceur système...")
     check_and_create_launcher()
     
+    print("✅ Initialisation terminée - Lancement interface")
+    
+    # === LANCEMENT INTERFACE ===
     try:
         creer_interface()
     except Exception as e:
         logging.error(f"Erreur lors de l'exécution de l'interface : {e}")
+        print(f"❌ Erreur interface: {e}")
         raise
     finally:
-        logging.info("Application terminée.")
+        logging.info("🔄 Application terminée")
 
 if __name__ == "__main__":
     logging.info("Initialisation de l'application... (Première instance)")

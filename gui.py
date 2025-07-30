@@ -26,6 +26,39 @@ logging.basicConfig(
 logging.info("Application started.")
 logging.info("Initializing new JSON configuration system.")
 
+class ToolTip:
+    """Classe pour créer des infobulles sur les widgets tkinter"""
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip_window = None
+        
+        # Lier les événements
+        self.widget.bind("<Enter>", self.show_tooltip)
+        self.widget.bind("<Leave>", self.hide_tooltip)
+    
+    def show_tooltip(self, event=None):
+        if self.tooltip_window or not self.text:
+            return
+        
+        x, y, _, _ = self.widget.bbox("insert") if hasattr(self.widget, 'bbox') else (0, 0, 0, 0)
+        x += self.widget.winfo_rootx() + 20
+        y += self.widget.winfo_rooty() + 20
+        
+        self.tooltip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        
+        label = tk.Label(tw, text=self.text, justify='left',
+                        background="#ffffcc", relief='solid', borderwidth=1,
+                        font=("Arial", 8), wraplength=300)
+        label.pack(ipadx=5, ipady=3)
+    
+    def hide_tooltip(self, event=None):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+
 PROFILES_DIR = "profiles"
 CONVERSATIONS_DIR = "conversations"
 DEVELOPMENT_DIR = "development"
@@ -783,6 +816,7 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
 def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=None, status_label=None):
     """
     Version améliorée avec gestion intelligente de l'historique via ConversationManager
+    Support pour méthodes curl et native (V2)
     """
     question = champ_q.get('1.0', tk.END).strip()
     
@@ -793,6 +827,15 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
         champ_r.insert('1.0', "Veuillez saisir une question.")
         champ_r.config(state="disabled")
         return
+
+    # Récupérer la méthode depuis le profil chargé
+    profil = charger_profil_api()
+    method = profil.get('method', 'curl') if profil else 'curl'
+    
+    # Indicateur de méthode utilisée (discret)
+    method_indicator = "🌐" if method == 'curl' else "⚡" if method == 'native' else "📡"
+    champ_r.insert(tk.END, f"{method_indicator} Traitement ({method})...\n")
+    champ_r.update_idletasks()
 
     try:
         # 1. Ajouter la question à l'historique du ConversationManager
@@ -1048,15 +1091,27 @@ def ouvrir_fenetre_apitest():
     else:
         print("ℹ️  Historique désactivé - ConversationManager non initialisé")
 
-    # Création de la commande API (champ caché)
+    # Création de la commande API (champ caché) - Compatible V2
     def creerCommandeAPI(profil):
         if not profil:
             return ""
         
-        # Nouveau système : utiliser les templates séparés
-        template_id = profil.get('template_id', '')
-        if template_id:
-            template_content = config_manager.load_template(template_id)
+        # Récupérer méthode et informations V2
+        method = profil.get('method', 'curl')
+        template_type = profil.get('template_type', 'chat')
+        provider = profil.get('name', '').lower()
+        
+        # Nouveau système V2 : templates typés
+        if method == 'curl':
+            # Essayer d'abord la nouvelle structure typée
+            template_content = config_manager.load_typed_template(provider, template_type, 'curl')
+            
+            if not template_content:
+                # Fallback vers l'ancienne structure
+                template_id = profil.get('template_id', '')
+                if template_id:
+                    template_content = config_manager.load_template(template_id)
+            
             if template_content:
                 # Remplacer la clé API dans le template
                 api_key = profil.get('api_key', '')
@@ -1064,12 +1119,21 @@ def ouvrir_fenetre_apitest():
                 if api_key and replace_key:
                     return template_content.replace(replace_key, api_key)
                 return template_content
+                
+        elif method == 'native':
+            # Pour le mode natif, charger le template Python
+            template_content = config_manager.load_typed_template(provider, template_type, 'native')
+            if template_content:
+                return f"# Mode Native SDK - {provider.title()}\n{template_content}"
+            else:
+                return f"# Mode Native SDK - {provider.title()}\n# Template natif non encore disponible"
         
-        # Fallback : ancien système curl_exe (pour compatibilité)
+        # Fallback final : ancien système curl_exe (pour compatibilité)
         curl_exe = profil.get('curl_exe', '')
         api_key = profil.get('api_key', '')
         if curl_exe and api_key:
-            return curl_exe.replace('GEMINI_API_KEY', api_key)
+            replace_key = profil.get('replace_apikey', 'GEMINI_API_KEY')
+            return curl_exe.replace(replace_key, api_key)
         return curl_exe
 
     cmd_api = creerCommandeAPI(profilAPIActuel)
@@ -1080,9 +1144,58 @@ def ouvrir_fenetre_apitest():
     cadre_principal = ttk.Frame(fenetre, padding="10")
     cadre_principal.pack(fill="both", expand=True)
 
-    # Afficher le nom du profil API par défaut ou le préfixe du fichier
+    # Afficher le nom du profil API par défaut et les informations de méthode
     label_profil = ttk.Label(cadre_principal, text=f"Profil chargé : {nom_profil_charge.split('.')[0]}", font=("Arial", 12, "bold"))
-    label_profil.pack(pady=10)
+    label_profil.pack(pady=5)
+    
+    # === INDICATEUR MÉTHODE ET CONFIGURATION V2 ===
+    def get_method_info():
+        """Récupère et formate les informations de méthode depuis le profil chargé"""
+        method = profilAPIActuel.get('method', 'curl')
+        template_type = profilAPIActuel.get('template_type', 'chat')
+        llm_model = profilAPIActuel.get('llm_model', '')
+        
+        # Formater l'affichage selon la méthode
+        if method == 'curl':
+            method_display = "🌐 Curl"
+            if llm_model:
+                return f"{method_display} | {template_type.title()} | {llm_model}"
+            else:
+                return f"{method_display} | {template_type.title()}"
+        elif method == 'native':
+            method_display = "⚡ Native SDK"
+            if llm_model:
+                return f"{method_display} | {template_type.title()} | {llm_model}"
+            else:
+                return f"{method_display} | {template_type.title()}"
+        else:
+            return f"📡 {method.title()} | {template_type.title()}"
+    
+    # Label méthode avec style discret mais informatif et infobulle
+    method_info_label = ttk.Label(cadre_principal, text=get_method_info(), 
+                                 font=("Arial", 9), foreground="darkblue")
+    method_info_label.pack(pady=2)
+    
+    # Ajouter infobulle avec informations détaillées selon la méthode
+    method = profilAPIActuel.get('method', 'curl')
+    if method == 'curl':
+        tooltip_text = "Mode Curl: Utilisation des commandes curl pour les requêtes API.\nMode par défaut compatible avec tous les systèmes."
+    elif method == 'native':
+        tooltip_text = "Mode Native SDK: Utilisation des SDK natifs Python pour des performances optimales.\n"
+        provider = profilAPIActuel.get('name', '').lower()
+        if provider == 'openai':
+            tooltip_text += "SDK requis: pip install openai"
+        elif provider == 'gemini':
+            tooltip_text += "SDK requis: pip install google-generativeai"
+        elif provider == 'claude':
+            tooltip_text += "SDK requis: pip install anthropic"
+        else:
+            tooltip_text += f"SDK natif pour {provider}"
+    else:
+        tooltip_text = f"Mode {method.title()}: Méthode personnalisée"
+    
+    # Créer l'infobulle
+    ToolTip(method_info_label, tooltip_text)
     
     # === INDICATEUR DE STATUT CONVERSATION ===
     if conversation_manager and conversation_manager.show_indicators:
@@ -1132,7 +1245,7 @@ def ouvrir_fenetre_apitest():
 
     # Champ Q (question)
     label_q = ttk.Label(cadre_principal, text="Question (Q) :", font=("Arial", 10))
-    label_q.pack(anchor="w", pady=5)
+    label_q.pack(anchor="w", pady=(10,5))
     champ_q = scrolledtext.ScrolledText(cadre_principal, width=90, height=5, wrap="word", font=("Arial", 10))
     champ_q.pack(pady=5)
 
@@ -1179,7 +1292,16 @@ def ouvrir_fenetre_apitest():
     bouton_copier = ttk.Button(frame_boutons, text="Copier la réponse", command=lambda: copier_au_presse_papier(champ_r))
     bouton_copier.pack(side="left", padx=10)
 
-    bouton_valider = ttk.Button(frame_boutons, text="Envoyer la question", 
+    # Bouton adaptatif selon la méthode
+    method = profilAPIActuel.get('method', 'curl')
+    if method == 'curl':
+        bouton_text = "🌐 Envoyer (Curl)"
+    elif method == 'native':
+        bouton_text = "⚡ Envoyer (Native)"
+    else:
+        bouton_text = "📡 Envoyer la question"
+        
+    bouton_valider = ttk.Button(frame_boutons, text=bouton_text, 
                                 command=lambda: soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager, status_label))
     bouton_valider.pack(side="left", padx=10)
     
@@ -1255,7 +1377,43 @@ def ouvrir_fenetre_apitest():
 
 def open_setup_menu():
     setup_window = tk.Toplevel(root)
-    setup_window.title("SETUP")
+    setup_window.title("SETUP API - Configuration")
+    setup_window.geometry("600x700")  # Taille fixe adaptée
+    setup_window.resizable(True, True)
+    
+    # Créer un canvas avec scrollbar pour gérer la hauteur
+    canvas = tk.Canvas(setup_window)
+    scrollbar = ttk.Scrollbar(setup_window, orient="vertical", command=canvas.yview)
+    scrollable_frame = ttk.Frame(canvas)
+    
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    # Gestion du scroll avec la molette de la souris
+    def _on_mousewheel(event):
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    def bind_mousewheel(event=None):
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    
+    def unbind_mousewheel(event=None):
+        canvas.unbind_all("<MouseWheel>")
+    
+    # Bind events pour scroll
+    canvas.bind('<Enter>', bind_mousewheel)
+    canvas.bind('<Leave>', unbind_mousewheel)
+    
+    # Configuration grid
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    
+    # Configurer les colonnes pour une meilleure répartition
+    scrollable_frame.grid_columnconfigure(1, weight=1)
 
     # Fonction pour charger les profils disponibles
     def charger_profils():
@@ -1351,65 +1509,144 @@ def open_setup_menu():
             logging.error(f"Erreur lors du chargement du profil par défaut Setup API : {e}")
             return "Gemini"
 
-    # Choix du modèle (liste déroulante des profils existants)
-    model_label = ttk.Label(setup_window, text="Nom de l'API :")
-    model_label.grid(row=0, column=0, sticky="w", pady=5)
+    # Choix du provider (liste déroulante des profils existants)
+    provider_label = ttk.Label(scrollable_frame, text="Provider LLM :")
+    provider_label.grid(row=0, column=0, sticky="w", pady=5, padx=(10,5))
     selected_model = tk.StringVar(value=charger_profil_defaut())
-    model_combobox = ttk.Combobox(setup_window, textvariable=selected_model, values=charger_profils())
-    model_combobox.grid(row=0, column=1, columnspan=2, sticky="ew", pady=5)
+    model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_model, values=charger_profils())
+    model_combobox.grid(row=0, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
     model_combobox.bind("<<ComboboxSelected>>", mettre_a_jour_champs)
 
+    # Méthode de connexion
+    method_label = ttk.Label(scrollable_frame, text="Méthode :")
+    method_label.grid(row=1, column=0, sticky="w", pady=5, padx=(10,5))
+    selected_method = tk.StringVar(value="curl")
+    method_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_method, 
+                                   values=["curl", "native (bientôt)"], state="readonly")
+    method_combobox.grid(row=1, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    
+    # Fonction pour mettre à jour l'affichage selon la méthode
+    def update_method_fields(*args):
+        method = selected_method.get()
+        if method == "curl":
+            # Mode curl : afficher les champs curl
+            api_url_label.config(text="Texte à remplacer :")
+            curl_exe_label.grid(row=11, column=0, sticky="w", pady=5, padx=(10,5))
+            curl_exe_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+        elif method == "native (bientôt)":
+            # Mode native : masquer commande curl, changer le label
+            api_url_label.config(text="Paramètres template :")
+            curl_exe_label.grid_remove()
+            curl_exe_entry.grid_remove()
+    
+    # Lier la fonction au changement de méthode
+    selected_method.trace('w', update_method_fields)
+
+    # Type de template
+    template_type_label = ttk.Label(scrollable_frame, text="Type Template :")
+    template_type_label.grid(row=2, column=0, sticky="w", pady=5, padx=(10,5))
+    selected_template_type = tk.StringVar(value="chat")
+    template_type_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_template_type,
+                                          values=["chat", "completion (futur)", "embedding (futur)"], state="readonly")
+    template_type_combobox.grid(row=2, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+
+    # Modèle LLM spécifique
+    llm_model_label = ttk.Label(scrollable_frame, text="Modèle LLM :")
+    llm_model_label.grid(row=3, column=0, sticky="w", pady=5, padx=(10,5))
+    selected_llm_model = tk.StringVar(value="")
+    llm_model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_llm_model, state="readonly")
+    llm_model_combobox.grid(row=3, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+
+    # Fonction pour mettre à jour les modèles disponibles selon le provider
+    def mettre_a_jour_modeles(*args):
+        provider = selected_model.get().lower()
+        models = []
+        
+        if provider == "openai":
+            models = ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
+        elif provider == "gemini":
+            models = ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+        elif provider == "claude":
+            models = ["claude-3-sonnet-20240229", "claude-3-opus-20240229", "claude-3-haiku-20240307"]
+        
+        llm_model_combobox['values'] = models
+        if models:
+            selected_llm_model.set(models[0])  # Sélectionner le premier par défaut
+    
+    # Bind pour mise à jour automatique des modèles
+    selected_model.trace('w', mettre_a_jour_modeles)
+
+    def extraire_modele_du_template(template_content: str, provider: str) -> str:
+        """Extrait le modèle du template curl pour compatibilité"""
+        if not template_content:
+            return ""
+            
+        if provider == "openai" and '"model":' in template_content:
+            import re
+            match = re.search(r'"model":\s*"([^"]+)"', template_content)
+            return match.group(1) if match else ""
+        elif provider == "gemini" and "models/" in template_content:
+            import re
+            match = re.search(r'models/([^:?]+)', template_content)
+            return match.group(1) if match else ""
+        elif provider == "claude" and '"model":' in template_content:
+            import re
+            match = re.search(r'"model":\s*"([^"]+)"', template_content)
+            return match.group(1) if match else ""
+        
+        return ""
+
     # Champ Rôle
-    role_label = ttk.Label(setup_window, text="Rôle :")
-    role_label.grid(row=1, column=0, sticky="w", pady=5)
+    role_label = ttk.Label(scrollable_frame, text="Rôle :")
+    role_label.grid(row=4, column=0, sticky="w", pady=5, padx=(10,5))
     role_var = tk.StringVar(value="")
-    role_entry = ttk.Entry(setup_window, textvariable=role_var)
-    role_entry.grid(row=1, column=1, columnspan=2, sticky="ew", pady=5)
+    role_entry = ttk.Entry(scrollable_frame, textvariable=role_var)
+    role_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
 
     # Comportement Enregistré
-    default_behavior_label = ttk.Label(setup_window, text="Comportement par Défaut :")
-    default_behavior_label.grid(row=2, column=0, sticky="w", pady=5)
+    default_behavior_label = ttk.Label(scrollable_frame, text="Comportement par Défaut :")
+    default_behavior_label.grid(row=5, column=0, sticky="w", pady=5, padx=(10,5))
     default_behavior_var = tk.StringVar(value="")
-    default_behavior_entry = ttk.Entry(setup_window, textvariable=default_behavior_var)
-    default_behavior_entry.grid(row=2, column=1, columnspan=2, sticky="ew", pady=5)
+    default_behavior_entry = ttk.Entry(scrollable_frame, textvariable=default_behavior_var)
+    default_behavior_entry.grid(row=5, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
 
     # Texte à remplacer
-    api_url_label = ttk.Label(setup_window, text="Texte à remplacer :")
-    api_url_label.grid(row=3, column=0, sticky="w", pady=5)
+    api_url_label = ttk.Label(scrollable_frame, text="Texte à remplacer :")
+    api_url_label.grid(row=6, column=0, sticky="w", pady=5, padx=(10,5))
     api_url_var = tk.StringVar(value="")
-    api_url_entry = ttk.Entry(setup_window, textvariable=api_url_var, width=50)
-    api_url_entry.grid(row=3, column=1, columnspan=2, sticky="ew", pady=5)
+    api_url_entry = ttk.Entry(scrollable_frame, textvariable=api_url_var, width=50)
+    api_url_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
 
     # Clé API
-    api_key_label = ttk.Label(setup_window, text="Clé API :")
-    api_key_label.grid(row=4, column=0, sticky="w", pady=5)
+    api_key_label = ttk.Label(scrollable_frame, text="Clé API :")
+    api_key_label.grid(row=7, column=0, sticky="w", pady=5, padx=(10,5))
     api_key_var = tk.StringVar(value="")
-    api_key_entry = ttk.Entry(setup_window, textvariable=api_key_var, show="*")
-    api_key_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=5)
+    api_key_entry = ttk.Entry(scrollable_frame, textvariable=api_key_var, show="*")
+    api_key_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
 
     # Historique
     history_checkbutton_var = tk.BooleanVar(value=False)
-    history_checkbutton = ttk.Checkbutton(setup_window, text="Historique", variable=history_checkbutton_var)
-    history_checkbutton.grid(row=5, column=0, columnspan=2, sticky="w", pady=5)
+    history_checkbutton = ttk.Checkbutton(scrollable_frame, text="Historique", variable=history_checkbutton_var)
+    history_checkbutton.grid(row=8, column=0, columnspan=2, sticky="w", pady=5, padx=(10,5))
 
     # Case à cocher pour définir le profil par défaut
     default_profile_var = tk.BooleanVar(value=False)
-    default_profile_checkbutton = ttk.Checkbutton(setup_window, text="Défaut", variable=default_profile_var)
-    default_profile_checkbutton.grid(row=6, column=0, columnspan=2, sticky="w", pady=5)
+    default_profile_checkbutton = ttk.Checkbutton(scrollable_frame, text="Défaut", variable=default_profile_var)
+    default_profile_checkbutton.grid(row=9, column=0, columnspan=2, sticky="w", pady=5, padx=(10,5))
 
     # Champ replace_apikey
-    replace_apikey_label = ttk.Label(setup_window, text="Remplacer API Key :")
-    replace_apikey_label.grid(row=7, column=0, sticky="w", pady=5)
+    replace_apikey_label = ttk.Label(scrollable_frame, text="Remplacer API Key :")
+    replace_apikey_label.grid(row=10, column=0, sticky="w", pady=5, padx=(10,5))
     replace_apikey_var = tk.StringVar(value="")
-    replace_apikey_entry = ttk.Entry(setup_window, textvariable=replace_apikey_var)
-    replace_apikey_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=5)
+    replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var)
+    replace_apikey_entry.grid(row=10, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
 
     # Commande curl
-    curl_exe_label = ttk.Label(setup_window, text="Commande curl :")
-    curl_exe_label.grid(row=8, column=0, sticky="w", pady=5)
+    curl_exe_label = ttk.Label(scrollable_frame, text="Commande curl :")
+    curl_exe_label.grid(row=11, column=0, sticky="w", pady=5, padx=(10,5))
     curl_exe_var = tk.StringVar(value="")
-    curl_exe_entry = ttk.Entry(setup_window, textvariable=curl_exe_var, width=50)
-    curl_exe_entry.grid(row=8, column=1, columnspan=2, sticky="ew", pady=5)
+    curl_exe_entry = ttk.Entry(scrollable_frame, textvariable=curl_exe_var, width=50)
+    curl_exe_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
 
     # Charger le profil par défaut au démarrage
     profil_defaut = charger_profil_defaut()
@@ -1431,12 +1668,36 @@ def open_setup_menu():
         else:
             # Fallback vers curl_exe pour compatibilité
             curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+        
+        # Charger méthode et type template (nouveaux champs V2)
+        selected_method.set(donnees_profil.get("method", "curl"))
+        selected_template_type.set(donnees_profil.get("template_type", "chat"))
+        
+        # Initialiser les modèles et sélectionner le modèle courant
+        mettre_a_jour_modeles()
+        current_model = donnees_profil.get("llm_model", "")
+        if current_model and current_model in llm_model_combobox['values']:
+            selected_llm_model.set(current_model)
+        else:
+            # Extraire le modèle du template curl si disponible
+            template_content = curl_exe_var.get()
+            model_extracted = extraire_modele_du_template(template_content, profil_defaut.lower())
+            if model_extracted:
+                selected_llm_model.set(model_extracted)
 
     def enregistrer_configuration():
         profil_selectionne = selected_model.get()
         if not profil_selectionne:
             messagebox.showerror("Erreur", "Veuillez sélectionner un profil.")
             return
+
+        # Mettre à jour le template avec le modèle sélectionné
+        template_content = curl_exe_var.get()
+        llm_model = selected_llm_model.get()
+        
+        if llm_model and template_content:
+            template_content = mettre_a_jour_modele_dans_template(template_content, llm_model, profil_selectionne.lower())
+            curl_exe_var.set(template_content)
 
         config_data = {
             "name": profil_selectionne,
@@ -1448,6 +1709,9 @@ def open_setup_menu():
             "default": default_profile_var.get(),
             "replace_apikey": replace_apikey_var.get(),
             "template_id": f"{profil_selectionne.lower()}_chat",
+            "method": selected_method.get(),  # Nouveau champ V2
+            "template_type": selected_template_type.get(),  # Nouveau champ V2
+            "llm_model": selected_llm_model.get(),  # Nouveau champ V2
             "file_generation": {
                 "enabled": False,
                 "mode": "simple",
@@ -1483,10 +1747,26 @@ def open_setup_menu():
             messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde du profil : {e}")
 
         setup_window.destroy()
+    
+    def mettre_a_jour_modele_dans_template(template: str, model: str, provider: str) -> str:
+        """Met à jour le modèle dans le template curl"""
+        import re
+        
+        if provider == "openai":
+            # Remplacer "model": "ancien-model" par "model": "nouveau-model"
+            return re.sub(r'"model":\s*"[^"]+"', f'"model": "{model}"', template)
+        elif provider == "gemini":
+            # Remplacer models/ancien-model: par models/nouveau-model:
+            return re.sub(r'models/[^:?]+', f'models/{model}', template)
+        elif provider == "claude":
+            # Remplacer "model": "ancien-model" par "model": "nouveau-model"
+            return re.sub(r'"model":\s*"[^"]+"', f'"model": "{model}"', template)
+        
+        return template
 
     # Frame pour disposer les boutons côte à côte
-    boutons_frame = ttk.Frame(setup_window)
-    boutons_frame.grid(row=9, column=0, columnspan=3, pady=10)
+    boutons_frame = ttk.Frame(scrollable_frame)
+    boutons_frame.grid(row=12, column=0, columnspan=3, pady=20, padx=(10,10))
     
     bouton_enregistrer = ttk.Button(boutons_frame, text="Enregistrer", command=enregistrer_configuration)
     bouton_enregistrer.pack(side="left", padx=(0, 10))
@@ -1553,7 +1833,7 @@ def open_setup_file_menu():
     # Extensions disponibles
     extensions = [".py", ".js", ".ts", ".html", ".css", ".php", ".rb", ".go", ".kt", ".swift", 
                   ".rs", ".dart", ".vue", ".jsx", ".tsx", ".scss", ".sass", ".less", ".sql", 
-                  ".txt", ".md", ".json", ".xml", ".yaml", ".yml", ".c", ".cpp", ".java", ".cs", ".sh"]
+                  ".txt", ".md", ".json", ".xml", ".yaml", ".yml", ".c", ".cpp", ".java", ".cs", ".sh", ".csv", ".markup"]
     
     # Correspondance langages/extensions pour interface utilisateur
     langages_extensions = {
@@ -1561,6 +1841,7 @@ def open_setup_file_menu():
         "C++": ".cpp", 
         "C#": ".cs",
         "CSS": ".css",
+        "CSV": ".csv",
         "Dart": ".dart",
         "Go": ".go",
         "HTML": ".html",
@@ -1570,6 +1851,7 @@ def open_setup_file_menu():
         "Kotlin": ".kt",
         "Less": ".less",
         "Markdown": ".md",
+        "Markup": ".markup",
         "PHP": ".php",
         "Python": ".py",
         "Ruby": ".rb",

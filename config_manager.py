@@ -227,7 +227,7 @@ class ConfigManager:
             return False
     
     def save_template(self, template_id: str, template_content: str) -> bool:
-        """Sauvegarde un template de commande API"""
+        """Sauvegarde un template de commande API (ancienne structure pour compatibilité)"""
         try:
             file_path = os.path.join(self.templates_dir, "api_commands", f"{template_id}.txt")
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -242,7 +242,7 @@ class ConfigManager:
             return False
     
     def load_template(self, template_id: str) -> Optional[str]:
-        """Charge un template de commande API"""
+        """Charge un template de commande API (ancienne structure pour compatibilité)"""
         try:
             file_path = os.path.join(self.templates_dir, "api_commands", f"{template_id}.txt")
             if not os.path.exists(file_path):
@@ -252,6 +252,41 @@ class ConfigManager:
                 return f.read()
         except Exception as e:
             self.logger.error(f"Erreur chargement template {template_id} : {e}")
+            return None
+    
+    def save_typed_template(self, provider: str, template_type: str, method: str, template_content: str) -> bool:
+        """Sauvegarde un template dans la nouvelle structure typée (V2)"""
+        try:
+            file_path = os.path.join(self.templates_dir, template_type, provider, f"{method}_basic.txt")
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(template_content)
+            
+            self.logger.info(f"Template typé {provider}/{template_type}/{method} sauvegardé")
+            return True
+        except Exception as e:
+            self.logger.error(f"Erreur sauvegarde template typé {provider}/{template_type}/{method} : {e}")
+            return False
+    
+    def load_typed_template(self, provider: str, template_type: str, method: str) -> Optional[str]:
+        """Charge un template dans la nouvelle structure typée (V2)"""
+        try:
+            # Essayer d'abord la nouvelle structure
+            file_path = os.path.join(self.templates_dir, template_type, provider, f"{method}_basic.txt")
+            if os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            
+            # Fallback vers l'ancienne structure pour compatibilité
+            legacy_path = os.path.join(self.templates_dir, "api_commands", f"{provider}_{template_type}.txt")
+            if os.path.exists(legacy_path):
+                with open(legacy_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            
+            return None
+        except Exception as e:
+            self.logger.error(f"Erreur chargement template typé {provider}/{template_type}/{method} : {e}")
             return None
     
     def save_conversation_template(self, template_id: str, template_content: str) -> bool:
