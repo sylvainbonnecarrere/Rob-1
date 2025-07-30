@@ -320,11 +320,32 @@ exit $EXIT_CODE
         logging.error(f"Erreur lors de la création du lanceur: {e}")
         return False
 
+def ensure_templates_installed():
+    """S'assure que tous les templates API sont correctement installés"""
+    try:
+        from install_templates import create_api_templates, create_profile_templates
+        
+        # Générer/vérifier les templates API
+        create_api_templates()
+        
+        # Générer les templates de profils si nécessaire
+        create_profile_templates()
+        
+        logging.info("✅ Templates API vérifiés et mis à jour")
+        return True
+        
+    except Exception as e:
+        logging.warning(f"⚠️ Erreur vérification templates: {e}")
+        return False
+
 def main():
     """Point d'entrée principal de l'application."""
     logging.info("Application démarrée.")
     # Ajout d'un log pour indiquer le lancement initial de l'application
     logging.info("Lancement initial de l'application.")
+    
+    # S'assurer que les templates API sont correctement installés
+    ensure_templates_installed()
     
     # Créer le lanceur OS-spécifique au premier lancement
     check_and_create_launcher()

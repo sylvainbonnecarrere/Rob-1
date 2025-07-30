@@ -199,13 +199,13 @@ def selectionProfilDefaut():
 def preparer_requete_curl(final_prompt):
     """
     Prépare une commande curl robuste et multiplateforme.
-    Gère tous les caractères spéciaux de manière fiable sur Windows, Linux et macOS.
+    VERSION CORRIGÉE: Gère les templates multi-lignes OpenAI/Gemini/Claude
     """
     import json
     import re
     import platform
     
-    # Nouveau système : utiliser les templates
+    # Récupérer le template et les paramètres
     template_id = profilAPIActuel.get('template_id', '')
     curl_exe = ""
     
@@ -214,187 +214,106 @@ def preparer_requete_curl(final_prompt):
         if template_content:
             curl_exe = template_content
         else:
-            # Fallback vers curl_exe si le template n'existe pas
             curl_exe = profilAPIActuel.get('curl_exe', '')
     else:
-        # Fallback vers curl_exe pour compatibilité
         curl_exe = profilAPIActuel.get('curl_exe', '')
     
     api_key = profilAPIActuel.get('api_key', '')
     replace_apikey = profilAPIActuel.get('replace_apikey', 'GEMINI_API_KEY')
     
-    # Détection de l'OS pour l'échappement approprié
+    # Détection OS
     os_type = platform.system().lower()
     is_windows = os_type == 'windows'
     
-    # Debug: Log des valeurs initiales
     print(f"[DEBUG] OS détecté: {os_type}")
     print(f"[DEBUG] template_id: {template_id}")
-    print(f"[DEBUG] curl_exe initial: {curl_exe[:100]}...")
-    print(f"[DEBUG] api_key: {api_key[:10]}..." if api_key else "[DEBUG] api_key: vide")
-    print(f"[DEBUG] replace_apikey: {replace_apikey}")
+    print(f"[DEBUG] Template length: {len(curl_exe)} chars")
     print(f"[DEBUG] final_prompt: {final_prompt[:100]}...")
 
-    # Remplacer la variable définie dans replace_apikey par la clé API
+    # Remplacer la clé API
     if replace_apikey and replace_apikey in curl_exe:
         curl_exe = curl_exe.replace(replace_apikey, api_key)
-        print(f"[DEBUG] Après remplacement clé API: {curl_exe[:100]}...")
+        print(f"[DEBUG] Clé API remplacée")
 
     try:
-        # SOLUTION ROBUSTE MULTIPLATEFORME
-        # Étape 1: Extraire la partie JSON de la commande curl
-        json_match = re.search(r"-d\s+['\"](.+?)['\"](?:\s|$)", curl_exe, re.DOTALL)
+        # MÉTHODE SIMPLIFIÉE ET ROBUSTE pour templates multi-lignes
+        # Pattern pour trouver -d suivi d'un guillemet
+        pattern = r"-d\s+(['\"])(.*?)\1"
         
-        if json_match:
-            json_string = json_match.group(1)
-            print(f"[DEBUG] JSON extrait: {json_string}")
+        # Chercher avec DOTALL pour gérer les multi-lignes
+        match = re.search(pattern, curl_exe, re.DOTALL)
+        
+        if match:
+            quote_char = match.group(1)
+            json_content = match.group(2)
             
-            # Étape 2: Parser le JSON template
+            print(f"[DEBUG] JSON extrait ({len(json_content)} chars)")
+            
             try:
-                json_data = json.loads(json_string)
-                print(f"[DEBUG] JSON parsé avec succès: {json_data}")
+                # Parser le JSON
+                json_data = json.loads(json_content)
                 
-                # Étape 3: NORMALISATION DU PROMPT pour éviter les conflits d'échappement
-                # Traiter les séquences d'échappement littérales comme du texte normal
-                prompt_normalise = final_prompt
-                
-                # Pas de transformation des séquences - on garde le texte tel quel
-                # json.dumps() se chargera de l'échappement correct
-                print(f"[DEBUG] Prompt normalisé: {repr(prompt_normalise)}")
-                
-                # Étape 4: Mettre à jour le texte dans la structure JSON
-                # Gestion robuste pour différentes structures d'API
-                if 'contents' in json_data:
+                # Modifier selon la structure API
+                if 'messages' in json_data and isinstance(json_data['messages'], list):
+                    # Format OpenAI/Claude
+                    for message in reversed(json_data['messages']):
+                        if message.get('role') == 'user':
+                            message['content'] = final_prompt
+                            print(f"[DEBUG] Prompt OpenAI mis à jour")
+                            break
+                elif 'contents' in json_data:
                     # Format Gemini
                     if isinstance(json_data['contents'], list) and len(json_data['contents']) > 0:
                         if 'parts' in json_data['contents'][0]:
-                            if isinstance(json_data['contents'][0]['parts'], list) and len(json_data['contents'][0]['parts']) > 0:
-                                json_data['contents'][0]['parts'][0]['text'] = prompt_normalise
-                elif 'messages' in json_data:
-                    # Format OpenAI/Claude
-                    if isinstance(json_data['messages'], list):
-                        # Chercher le message utilisateur le plus récent
-                        for message in reversed(json_data['messages']):
-                            if message.get('role') == 'user':
-                                message['content'] = prompt_normalise
-                                break
-                        else:
-                            # Si aucun message utilisateur trouvé, ajouter un nouveau
-                            json_data['messages'].append({'role': 'user', 'content': prompt_normalise})
+                            if isinstance(json_data['contents'][0]['parts'], list):
+                                json_data['contents'][0]['parts'][0]['text'] = final_prompt
+                                print(f"[DEBUG] Prompt Gemini mis à jour")
                 elif 'prompt' in json_data:
-                    # Format simple avec prompt direct
-                    json_data['prompt'] = prompt_normalise
-                else:
-                    # Format inconnu, essayer de trouver un champ text
-                    def update_text_recursively(obj, new_text):
-                        if isinstance(obj, dict):
-                            for key, value in obj.items():
-                                if key == 'text' and isinstance(value, str):
-                                    obj[key] = new_text
-                                    return True
-                                elif isinstance(value, (dict, list)):
-                                    if update_text_recursively(value, new_text):
-                                        return True
-                        elif isinstance(obj, list):
-                            for item in obj:
-                                if update_text_recursively(item, new_text):
-                                    return True
-                        return False
-                    
-                    update_text_recursively(json_data, prompt_normalise)
+                    # Format simple
+                    json_data['prompt'] = final_prompt
+                    print(f"[DEBUG] Prompt simple mis à jour")
                 
-                # Étape 5: Régénérer le JSON de manière propre et sûre
-                # json.dumps gère automatiquement l'échappement des caractères spéciaux
-                json_nouveau = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))
-                print(f"[DEBUG] JSON régénéré: {json_nouveau}")
+                # Régénérer le JSON avec indentation
+                new_json = json.dumps(json_data, ensure_ascii=False, indent=2)
                 
-                # Étape 6: ÉCHAPPEMENT MULTIPLATEFORME pour la ligne de commande
+                # Échappement selon l'OS
                 if is_windows:
-                    # Windows: échapper les guillemets doubles pour cmd/PowerShell
-                    json_escaped = json_nouveau.replace('"', '\\"')
-                    curl_nouveau = curl_exe.replace(json_match.group(0), f'-d "{json_escaped}"')
+                    # Windows: échapper les guillemets pour cmd
+                    escaped_json = new_json.replace('"', '\\"')
+                    new_data_part = f'-d "{escaped_json}"'
                 else:
-                    # Linux/macOS: utiliser des guillemets simples (plus sûr pour bash)
-                    # Échapper seulement les guillemets simples dans le JSON
-                    json_escaped = json_nouveau.replace("'", "'\"'\"'")  # Technique bash pour échapper '
-                    curl_nouveau = curl_exe.replace(json_match.group(0), f"-d '{json_escaped}'")
+                    # Linux/macOS: utiliser guillemets simples
+                    escaped_json = new_json.replace("'", "'\"'\"'")
+                    new_data_part = f"-d '{escaped_json}'"
                 
-                print(f"[DEBUG] Commande finale ({os_type}): {curl_nouveau[:200]}...")
+                # Remplacer la section complète
+                curl_nouveau = curl_exe.replace(match.group(0), new_data_part)
                 
-                # Étape 7: Validation finale - tester que le JSON est toujours valide
-                try:
-                    if is_windows:
-                        # Extraire et tester le JSON Windows
-                        test_json = json_escaped.replace('\\"', '"')
-                    else:
-                        # Extraire et tester le JSON Linux/macOS  
-                        test_json = json_escaped.replace("'\"'\"'", "'")
-                    
-                    json.loads(test_json)
-                    print(f"[DEBUG] ✅ JSON final validé avec succès")
-                except json.JSONDecodeError as validation_error:
-                    print(f"[DEBUG] ⚠️ Attention: JSON final invalide: {validation_error}")
-                
+                print(f"[DEBUG] Template traité avec succès")
                 return curl_nouveau
                 
             except json.JSONDecodeError as e:
-                print(f"[DEBUG] Erreur parsing JSON: {e}, utilisation méthode de secours")
-                # Méthode de secours si le JSON n'est pas parsable
-                pass
+                print(f"[DEBUG] Erreur JSON: {e}")
+                
+        # FALLBACK: Recherche et remplacement simple
+        print(f"[DEBUG] Utilisation fallback")
         
-        # MÉTHODE DE SECOURS MULTIPLATEFORME
-        print("[DEBUG] Utilisation méthode de secours regex")
+        # Chercher et remplacer les contenus par défaut
+        defaults = ["Explain how AI works", "write a haiku about ai", "Hello", "Test message"]
         
-        # Fonction d'échappement sûre selon l'OS
-        def escape_for_shell(text, is_windows_os):
-            """Échappement adapté à l'OS"""
-            if is_windows_os:
-                # Windows: échapper pour JSON puis pour shell
-                escaped = json.dumps(text, ensure_ascii=False)[1:-1]  # Retirer les guillemets externes
-                return escaped.replace('"', '\\"')
-            else:
-                # Linux/macOS: utiliser l'échappement bash
-                return text.replace("'", "'\"'\"'")
-        
-        final_prompt_escaped = escape_for_shell(final_prompt, is_windows)
-        print(f"[DEBUG] Prompt échappé (secours): {final_prompt_escaped}")
-        
-        # Chercher et remplacer le texte dans le JSON avec regex robuste
-        patterns = [
-            r'"text":\s*"[^"]*"',     # Pattern Gemini
-            r'"content":\s*"[^"]*"',   # Pattern OpenAI/Claude
-            r'"prompt":\s*"[^"]*"',    # Pattern simple
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, curl_exe)
-            if match:
-                field_name = match.group().split(':')[0].strip()
-                if is_windows:
-                    nouveau_text = f'{field_name}: "{final_prompt_escaped}"'
-                else:
-                    nouveau_text = f"{field_name}: '{final_prompt_escaped}'"
-                curl_exe = curl_exe.replace(match.group(), nouveau_text)
-                print(f"[DEBUG] Pattern '{pattern}' trouvé et remplacé")
+        for default in defaults:
+            if default in curl_exe:
+                curl_exe = curl_exe.replace(default, final_prompt)
+                print(f"[DEBUG] Remplacé '{default}' par le prompt")
                 break
-        else:
-            # Dernière chance: remplacer le texte par défaut s'il existe
-            if "Explain how AI works" in curl_exe:
-                if is_windows:
-                    curl_exe = curl_exe.replace("Explain how AI works", final_prompt_escaped)
-                else:
-                    # Pour Linux/macOS, s'assurer que tout est entre guillemets simples
-                    curl_exe = curl_exe.replace('"Explain how AI works"', f"'{final_prompt_escaped}'")
-                print("[DEBUG] Remplacement texte par défaut effectué")
         
         return curl_exe
         
     except Exception as e:
-        print(f"[DEBUG] Erreur inattendue dans preparer_requete_curl: {e}")
-        # En cas d'erreur totale, retourner la commande originale
+        print(f"[DEBUG] Erreur dans preparer_requete_curl: {e}")
         return curl_exe
 
-    return curl_exe
+
 
 def corriger_commande_curl(commande):
     """
@@ -792,38 +711,69 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     """
     Affiche le résultat de la commande curl dans le champ R.
     Gère les erreurs et affiche des messages clairs en cas de problème.
+    VERSION ÉVOLUTIVE: Support multi-API (Gemini, OpenAI, Claude)
     """
-    champ_r.delete('1.0', tk.END)  # Nettoyer le champ avant d'afficher le résultat
+    # Import du parseur évolutif
+    try:
+        from api_response_parser import get_response_parser
+        parser = get_response_parser()
+    except ImportError:
+        # Fallback si le module n'est pas disponible
+        parser = None
+    
+    champ_r.delete('1.0', tk.END)  # Nettoyer le champ avant d'affichage
 
     if resultat.returncode == 0:
         try:
             reponse_json = json.loads(resultat.stdout)
 
-            # Vérifier si la réponse contient des erreurs
-            if "error" in reponse_json:
-                erreur_message = reponse_json["error"].get("message", "Erreur inconnue")
-                champ_r.insert(tk.END, f"Erreur API : {erreur_message}\n")
-                return
-
-            # Extraire le texte cible si disponible
-            if "candidates" in reponse_json:
-                texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
-
-                # Corriger l'encodage du texte avant de l'afficher dans le champ R
-                texte_cible_corrige = texte_cible.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
-
-                # Afficher le texte corrigé dans le champ R
-                champ_r.insert(tk.END, texte_cible_corrige)
-
-                # Génération de fichier si activée
-                question_originale = champ_q.get('1.0', tk.END).strip()
-                profil = charger_profil_api()
-                generer_fichier_simple(question_originale, texte_cible_corrige, profil)
-
-                # Supprimer le contenu du prompteur Q si la réponse s'est bien déroulée
-                champ_q.delete('1.0', tk.END)
+            if parser:
+                # === NOUVEAU SYSTÈME ÉVOLUTIF ===
+                success, texte_cible, api_detectee = parser.parse_response(reponse_json, 'auto')
+                
+                if success:
+                    print(f"🎯 API détectée: {api_detectee}")
+                    print(f"📝 Texte extrait: {texte_cible[:100]}...")
+                    
+                    # Corriger l'encodage du texte
+                    texte_cible_corrige = texte_cible.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                    
+                    # Afficher le texte corrigé dans le champ R
+                    champ_r.insert(tk.END, texte_cible_corrige)
+                    
+                    # Génération de fichier si activée
+                    question_originale = champ_q.get('1.0', tk.END).strip()
+                    profil = charger_profil_api()
+                    generer_fichier_simple(question_originale, texte_cible_corrige, profil)
+                    
+                    # Supprimer le contenu du prompteur Q
+                    champ_q.delete('1.0', tk.END)
+                    
+                else:
+                    champ_r.insert(tk.END, f"Erreur API ({api_detectee}): {texte_cible}")
+                    
             else:
-                champ_r.insert(tk.END, "La réponse ne contient pas de candidats valides.\n")
+                # === FALLBACK ANCIEN SYSTÈME (Gemini seulement) ===
+                if "error" in reponse_json:
+                    erreur_message = reponse_json["error"].get("message", "Erreur inconnue")
+                    champ_r.insert(tk.END, f"Erreur API : {erreur_message}\n")
+                    return
+
+                # Extraire le texte cible si disponible (Gemini uniquement)
+                if "candidates" in reponse_json:
+                    texte_cible = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+                    texte_cible_corrige = texte_cible.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                    champ_r.insert(tk.END, texte_cible_corrige)
+                    
+                    question_originale = champ_q.get('1.0', tk.END).strip()
+                    profil = charger_profil_api()
+                    generer_fichier_simple(question_originale, texte_cible_corrige, profil)
+                    champ_q.delete('1.0', tk.END)
+                else:
+                    champ_r.insert(tk.END, "La réponse ne contient pas de candidats valides.\n")
+                    
+        except json.JSONDecodeError as e:
+            champ_r.insert(tk.END, f"Erreur de parsing JSON: {e}\n\nRéponse brute:\n{resultat.stdout}")
         except Exception as e:
             champ_r.insert(tk.END, f"Erreur lors de l'analyse de la réponse : {e}\n{resultat.stdout}")
     else:
@@ -866,7 +816,16 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                     if resultat.returncode == 0:
                         try:
                             reponse_json = json.loads(resultat.stdout)
-                            return reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+                            
+                            # Utiliser le nouveau système de parsing
+                            try:
+                                from api_response_parser import get_response_parser
+                                parser = get_response_parser()
+                                success, texte, api_type = parser.parse_response(reponse_json, 'auto')
+                                return texte if success else "Erreur lors du résumé"
+                            except ImportError:
+                                # Fallback ancien système
+                                return reponse_json["candidates"][0]["content"]["parts"][0]["text"]
                         except:
                             return "Erreur lors du résumé"
                     return "Erreur API lors du résumé"
@@ -913,7 +872,23 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
         if resultat.returncode == 0:
             try:
                 reponse_json = json.loads(resultat.stdout)
-                texte_reponse = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+                
+                # Utiliser le nouveau système de parsing évolutif
+                try:
+                    from api_response_parser import get_response_parser
+                    parser = get_response_parser()
+                    success, texte_reponse, api_detectee = parser.parse_response(reponse_json, 'auto')
+                    
+                    if not success:
+                        # Si le parsing échoue, afficher l'erreur
+                        champ_r.insert('1.0', f"Erreur parsing API ({api_detectee}): {texte_reponse}")
+                        return
+                        
+                    print(f"🎯 API détectée dans soumettreQuestionAPI: {api_detectee}")
+                    
+                except ImportError:
+                    # Fallback vers l'ancien système (Gemini seulement)
+                    texte_reponse = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
                 
                 # 7. Ajouter la réponse au ConversationManager
                 if conversation_manager:
