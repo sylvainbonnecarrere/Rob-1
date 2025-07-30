@@ -848,6 +848,10 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 champ_r.insert(tk.END, "🔄 Génération du résumé contextuel...\n")
                 champ_r.update_idletasks()
                 
+                # Activer l'indicateur de synthèse en cours (couleur orange)
+                if 'synthesis_control' in globals():
+                    synthesis_control(True)
+                
                 # Fonction wrapper pour l'appel API de résumé
                 def api_summary_call(prompt_text):
                     profil = charger_profil_api()
@@ -875,6 +879,10 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 
                 # Générer le résumé
                 success = conversation_manager.summarize_history(api_summary_call)
+                
+                # Désactiver l'indicateur de synthèse en cours (retour couleur normale)
+                if 'synthesis_control' in globals():
+                    synthesis_control(False)
                 
                 if success:
                     stats = conversation_manager.get_stats()
@@ -1159,22 +1167,78 @@ def ouvrir_fenetre_apitest():
         if method == 'curl':
             method_display = "🌐 Curl"
             if llm_model:
-                return f"{method_display} | {template_type.title()} | {llm_model}"
+                method_part = f"{method_display} | {template_type.title()} | {llm_model}"
             else:
-                return f"{method_display} | {template_type.title()}"
+                method_part = f"{method_display} | {template_type.title()}"
         elif method == 'native':
             method_display = "⚡ Native SDK"
             if llm_model:
-                return f"{method_display} | {template_type.title()} | {llm_model}"
+                method_part = f"{method_display} | {template_type.title()} | {llm_model}"
             else:
-                return f"{method_display} | {template_type.title()}"
+                method_part = f"{method_display} | {template_type.title()}"
         else:
-            return f"📡 {method.title()} | {template_type.title()}"
+            method_part = f"📡 {method.title()} | {template_type.title()}"
+        
+        # Ajouter les informations de résumé
+        if conversation_manager and hasattr(conversation_manager, 'resume_profile'):
+            try:
+                resume_profile = conversation_manager.resume_profile
+                template = resume_profile.get("template_type", "défaut")
+                
+                # Formater l'affichage
+                if template.startswith("Template "):
+                    template_display = template.replace("Template ", "")
+                else:
+                    template_display = template
+                
+                resume_part = f"📋 Résumé: {template_display}"
+                
+            except Exception as e:
+                print(f"Erreur récupération profil résumé: {e}")
+                resume_part = "📋 Résumé: défaut"
+        else:
+            resume_part = "📋 Résumé: défaut"
+            
+        # Indicateur historique géré séparément
+        return f"{method_part} | {resume_part}"
     
-    # Label méthode avec style discret mais informatif et infobulle
-    method_info_label = ttk.Label(cadre_principal, text=get_method_info(), 
+    # Label consolidé avec méthode, modèle, et résumé sur une ligne
+    info_frame = ttk.Frame(cadre_principal)
+    info_frame.pack(pady=2)
+    
+    method_info_label = ttk.Label(info_frame, text=get_method_info(), 
                                  font=("Arial", 9), foreground="darkblue")
-    method_info_label.pack(pady=2)
+    method_info_label.pack(side="left")
+    
+    # Label séparé pour l'indicateur éclair avec couleur dynamique
+    flash_indicator_label = ttk.Label(info_frame, text="", 
+                                     font=("Arial", 9), foreground="darkblue")
+    flash_indicator_label.pack(side="left")
+    
+    # Mettre à jour l'affichage initial de l'indicateur éclair
+    if profilAPIActuel.get('history', False):
+        flash_indicator_label.config(text=" | ⚡", foreground="darkblue")
+    
+    # Fonctions pour gérer l'indicateur historique dynamique
+    def set_synthesis_in_progress(in_progress=True):
+        """Active/désactive l'état de synthèse en cours"""
+        get_method_info.synthesis_in_progress = in_progress
+        # Mettre à jour l'affichage du label principal
+        method_info_label.config(text=get_method_info())
+        
+        # Changer seulement la couleur du symbole éclair
+        if profilAPIActuel.get('history', False):
+            if in_progress:
+                flash_indicator_label.config(foreground="gold")  # Jaune/doré pour synthèse en cours
+            else:
+                flash_indicator_label.config(foreground="darkblue")  # Retour à la couleur normale
+    
+    # Initialiser l'état de synthèse et rendre la fonction accessible globalement
+    get_method_info.synthesis_in_progress = False
+    
+    # Stocker la fonction dans l'espace global pour y accéder depuis valider()
+    global synthesis_control
+    synthesis_control = set_synthesis_in_progress
     
     # Ajouter infobulle avec informations détaillées selon la méthode
     method = profilAPIActuel.get('method', 'curl')
@@ -1206,42 +1270,6 @@ def ouvrir_fenetre_apitest():
         # Mise à jour initiale de l'indicateur
         initial_status = conversation_manager.get_status_indicator()
         status_label.config(text=initial_status)
-        
-        # Indicateur du profil de résumé utilisé
-        def get_resume_profile_info():
-            """Récupère les informations sur le profil de résumé depuis la configuration active"""
-            try:
-                if conversation_manager and hasattr(conversation_manager, 'config'):
-                    # Utiliser la configuration du ConversationManager actif
-                    template = conversation_manager.config.get("summary_template", "défaut")
-                else:
-                    # Fallback: lire depuis le profil backup
-                    nom_profil = profilAPIActuel.get('name', 'Inconnu')
-                    backup_profile_path = os.path.join("profiles_backup_conversation", f"{nom_profil}.json")
-                    
-                    if os.path.exists(backup_profile_path):
-                        with open(backup_profile_path, 'r', encoding='utf-8') as f:
-                            backup_profile = json.load(f)
-                        conv_mgmt = backup_profile.get("conversation_management", {})
-                        template = conv_mgmt.get("summary_template", "défaut")
-                    else:
-                        template = "défaut"
-                
-                # Formater l'affichage
-                if template.startswith("Template "):
-                    template_display = template.replace("Template ", "")
-                else:
-                    template_display = template
-                
-                return f"📋 Résumé: {template_display}"
-                
-            except Exception as e:
-                print(f"Erreur récupération profil résumé: {e}")
-                return "📋 Résumé: défaut"
-        
-        resume_profile_label = ttk.Label(cadre_principal, text=get_resume_profile_info(), 
-                                        font=("Arial", 9), foreground="blue")
-        resume_profile_label.pack(pady=1)
 
     # Champ Q (question)
     label_q = ttk.Label(cadre_principal, text="Question (Q) :", font=("Arial", 10))
@@ -1378,8 +1406,22 @@ def ouvrir_fenetre_apitest():
 def open_setup_menu():
     setup_window = tk.Toplevel(root)
     setup_window.title("SETUP API - Configuration")
-    setup_window.geometry("600x700")  # Taille fixe adaptée
+    
+    # Calcul automatique de la taille optimale (80% de l'écran, max 600x500)
+    screen_width = setup_window.winfo_screenwidth()
+    screen_height = setup_window.winfo_screenheight()
+    
+    # Taille optimale : plus compacte mais utilisable
+    optimal_width = min(550, int(screen_width * 0.7))
+    optimal_height = min(500, int(screen_height * 0.7))
+    
+    # Centrer la fenêtre
+    x = (screen_width // 2) - (optimal_width // 2)
+    y = (screen_height // 2) - (optimal_height // 2)
+    
+    setup_window.geometry(f"{optimal_width}x{optimal_height}+{x}+{y}")
     setup_window.resizable(True, True)
+    setup_window.minsize(450, 400)  # Taille minimale utilisable
     
     # Créer un canvas avec scrollbar pour gérer la hauteur
     canvas = tk.Canvas(setup_window)
@@ -1511,19 +1553,19 @@ def open_setup_menu():
 
     # Choix du provider (liste déroulante des profils existants)
     provider_label = ttk.Label(scrollable_frame, text="Provider LLM :")
-    provider_label.grid(row=0, column=0, sticky="w", pady=5, padx=(10,5))
+    provider_label.grid(row=0, column=0, sticky="w", pady=3, padx=(10,5))
     selected_model = tk.StringVar(value=charger_profil_defaut())
     model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_model, values=charger_profils())
-    model_combobox.grid(row=0, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    model_combobox.grid(row=0, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
     model_combobox.bind("<<ComboboxSelected>>", mettre_a_jour_champs)
 
     # Méthode de connexion
     method_label = ttk.Label(scrollable_frame, text="Méthode :")
-    method_label.grid(row=1, column=0, sticky="w", pady=5, padx=(10,5))
+    method_label.grid(row=1, column=0, sticky="w", pady=3, padx=(10,5))
     selected_method = tk.StringVar(value="curl")
     method_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_method, 
                                    values=["curl", "native (bientôt)"], state="readonly")
-    method_combobox.grid(row=1, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    method_combobox.grid(row=1, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
     
     # Fonction pour mettre à jour l'affichage selon la méthode
     def update_method_fields(*args):
@@ -1544,18 +1586,18 @@ def open_setup_menu():
 
     # Type de template
     template_type_label = ttk.Label(scrollable_frame, text="Type Template :")
-    template_type_label.grid(row=2, column=0, sticky="w", pady=5, padx=(10,5))
+    template_type_label.grid(row=2, column=0, sticky="w", pady=3, padx=(10,5))
     selected_template_type = tk.StringVar(value="chat")
     template_type_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_template_type,
                                           values=["chat", "completion (futur)", "embedding (futur)"], state="readonly")
-    template_type_combobox.grid(row=2, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    template_type_combobox.grid(row=2, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Modèle LLM spécifique
     llm_model_label = ttk.Label(scrollable_frame, text="Modèle LLM :")
-    llm_model_label.grid(row=3, column=0, sticky="w", pady=5, padx=(10,5))
+    llm_model_label.grid(row=3, column=0, sticky="w", pady=3, padx=(10,5))
     selected_llm_model = tk.StringVar(value="")
     llm_model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_llm_model, state="readonly")
-    llm_model_combobox.grid(row=3, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    llm_model_combobox.grid(row=3, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Fonction pour mettre à jour les modèles disponibles selon le provider
     def mettre_a_jour_modeles(*args):
@@ -1598,55 +1640,55 @@ def open_setup_menu():
 
     # Champ Rôle
     role_label = ttk.Label(scrollable_frame, text="Rôle :")
-    role_label.grid(row=4, column=0, sticky="w", pady=5, padx=(10,5))
+    role_label.grid(row=4, column=0, sticky="w", pady=3, padx=(10,5))
     role_var = tk.StringVar(value="")
     role_entry = ttk.Entry(scrollable_frame, textvariable=role_var)
-    role_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    role_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Comportement Enregistré
     default_behavior_label = ttk.Label(scrollable_frame, text="Comportement par Défaut :")
-    default_behavior_label.grid(row=5, column=0, sticky="w", pady=5, padx=(10,5))
+    default_behavior_label.grid(row=5, column=0, sticky="w", pady=3, padx=(10,5))
     default_behavior_var = tk.StringVar(value="")
     default_behavior_entry = ttk.Entry(scrollable_frame, textvariable=default_behavior_var)
-    default_behavior_entry.grid(row=5, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    default_behavior_entry.grid(row=5, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Texte à remplacer
     api_url_label = ttk.Label(scrollable_frame, text="Texte à remplacer :")
-    api_url_label.grid(row=6, column=0, sticky="w", pady=5, padx=(10,5))
+    api_url_label.grid(row=6, column=0, sticky="w", pady=3, padx=(10,5))
     api_url_var = tk.StringVar(value="")
     api_url_entry = ttk.Entry(scrollable_frame, textvariable=api_url_var, width=50)
-    api_url_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    api_url_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Clé API
     api_key_label = ttk.Label(scrollable_frame, text="Clé API :")
-    api_key_label.grid(row=7, column=0, sticky="w", pady=5, padx=(10,5))
+    api_key_label.grid(row=7, column=0, sticky="w", pady=3, padx=(10,5))
     api_key_var = tk.StringVar(value="")
     api_key_entry = ttk.Entry(scrollable_frame, textvariable=api_key_var, show="*")
-    api_key_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    api_key_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Historique
     history_checkbutton_var = tk.BooleanVar(value=False)
     history_checkbutton = ttk.Checkbutton(scrollable_frame, text="Historique", variable=history_checkbutton_var)
-    history_checkbutton.grid(row=8, column=0, columnspan=2, sticky="w", pady=5, padx=(10,5))
+    history_checkbutton.grid(row=8, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
 
     # Case à cocher pour définir le profil par défaut
     default_profile_var = tk.BooleanVar(value=False)
     default_profile_checkbutton = ttk.Checkbutton(scrollable_frame, text="Défaut", variable=default_profile_var)
-    default_profile_checkbutton.grid(row=9, column=0, columnspan=2, sticky="w", pady=5, padx=(10,5))
+    default_profile_checkbutton.grid(row=9, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
 
     # Champ replace_apikey
     replace_apikey_label = ttk.Label(scrollable_frame, text="Remplacer API Key :")
-    replace_apikey_label.grid(row=10, column=0, sticky="w", pady=5, padx=(10,5))
+    replace_apikey_label.grid(row=10, column=0, sticky="w", pady=3, padx=(10,5))
     replace_apikey_var = tk.StringVar(value="")
     replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var)
-    replace_apikey_entry.grid(row=10, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    replace_apikey_entry.grid(row=10, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Commande curl
     curl_exe_label = ttk.Label(scrollable_frame, text="Commande curl :")
-    curl_exe_label.grid(row=11, column=0, sticky="w", pady=5, padx=(10,5))
+    curl_exe_label.grid(row=11, column=0, sticky="w", pady=3, padx=(10,5))
     curl_exe_var = tk.StringVar(value="")
     curl_exe_entry = ttk.Entry(scrollable_frame, textvariable=curl_exe_var, width=50)
-    curl_exe_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+    curl_exe_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Charger le profil par défaut au démarrage
     profil_defaut = charger_profil_defaut()
