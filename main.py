@@ -30,7 +30,8 @@ try:
     os.makedirs(PROFILES_DIR, exist_ok=True)
     os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
     os.makedirs(TEMPLATES_DIR, exist_ok=True)
-    os.makedirs(os.path.join(TEMPLATES_DIR, "api_commands"), exist_ok=True)
+    # Migration Phase 3 V2: Templates gérés exclusivement via APIManager
+    # Architecture V2 pure - Plus de référence à api_commands (supprimé)
     os.makedirs(os.path.join(TEMPLATES_DIR, "chat"), exist_ok=True)
     print("✅ Dossiers système créés avec succès")
 except Exception as e:

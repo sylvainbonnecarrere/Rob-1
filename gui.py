@@ -13,6 +13,7 @@ from datetime import datetime
 
 # Importer notre nouveau système de configuration
 from config_manager import ConfigManager
+from core.api_manager import ProfileManagerFactory
 from conversation_manager import ConversationManager
 from system_profile_generator import generate_system_profile_at_startup
 
@@ -67,10 +68,86 @@ os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
 os.makedirs(DEVELOPMENT_DIR, exist_ok=True)
 
 # Initialiser le gestionnaire de configuration JSON
+# Initialisation APIManager pour gestion centralisée des profils
+api_manager = ProfileManagerFactory.create_api_manager_with_validation()
+if not api_manager:
+    print("ERREUR: Impossible d'initialiser APIManager")
+    sys.exit(1)
+
+# Garder ConfigManager pour les opérations de sauvegarde (temporaire)
 config_manager = ConfigManager(".")
+
+# Initialiser le nouveau gestionnaire API (Phase 2 - Refactorisation)
+api_manager = ProfileManagerFactory.create_api_manager_with_validation()
 
 # Initialiser le gestionnaire de conversation (sera configuré via Setup History)
 conversation_manager = None
+
+# Variable globale pour stocker le profil API actuellement chargé
+profilAPIActuel = {}
+
+def charger_profil_api():
+    """
+    Retourne le profil API actuellement chargé.
+    """
+    global profilAPIActuel
+    return profilAPIActuel
+
+def generer_prompt(question, profil):
+    """
+    Génère un prompt complet avec le rôle et le comportement du profil.
+    """
+    if not profil:
+        return question
+    
+    role = profil.get('role', '')
+    behavior = profil.get('behavior', '')
+    
+    if role and behavior:
+        return f"Tu es {role}. Tu dois être {behavior}. Question: {question}"
+    elif role:
+        return f"Tu es {role}. Question: {question}"
+    elif behavior:
+        return f"Tu dois être {behavior}. Question: {question}"
+    else:
+        return question
+
+def generer_fichier_simple(question, reponse, profil):
+    """
+    Génère un fichier simple avec la question et la réponse.
+    """
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nom_fichier = f"conversation_{timestamp}.txt"
+        chemin_fichier = os.path.join("conversations", nom_fichier)
+        
+        with open(chemin_fichier, 'w', encoding='utf-8') as f:
+            f.write(f"=== CONVERSATION ===\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Profil: {profil.get('name', 'Inconnu') if profil else 'Aucun'}\n")
+            f.write(f"Question: {question}\n\n")
+            f.write(f"Réponse: {reponse}\n")
+        
+        print(f"Fichier sauvegardé: {chemin_fichier}")
+    except Exception as e:
+        print(f"Erreur lors de la sauvegarde: {e}")
+
+def generer_fichier_development(nom_fichier, extension, contenu):
+    """
+    Génère un fichier de développement dans le dossier development.
+    """
+    try:
+        if not nom_fichier.endswith(f".{extension}"):
+            nom_fichier = f"{nom_fichier}.{extension}"
+        
+        chemin_fichier = os.path.join("development", nom_fichier)
+        
+        with open(chemin_fichier, 'w', encoding='utf-8') as f:
+            f.write(contenu)
+        
+        print(f"Fichier de développement sauvegardé: {chemin_fichier}")
+    except Exception as e:
+        print(f"Erreur lors de la sauvegarde du fichier de développement: {e}")
 
 # Générer le profil système au démarrage
 generate_system_profile_at_startup(".")
@@ -193,7 +270,7 @@ def lire_profil_defaut():
 def get_default_profile():
     """Charge le profil par défaut via le ConfigManager."""
     try:
-        default_profile = config_manager.get_default_profile()
+        default_profile = api_manager.get_default_profile()
         if default_profile:
             return default_profile['name']
         return "Gemini"  # Fallback
@@ -209,7 +286,7 @@ def selectionProfilDefaut():
     global profilAPIActuel
     
     try:
-        profil_defaut = config_manager.get_default_profile()
+        profil_defaut = api_manager.get_default_profile()
         if profil_defaut:
             profilAPIActuel = profil_defaut
             nom_profil_charge = f"{profil_defaut['name']}.json"
@@ -238,95 +315,136 @@ def preparer_requete_curl(final_prompt):
     import re
     import platform
     
-    # Récupérer le template et les paramètres
+    # PHASE 3: Utiliser le nouveau système APIManager avec placeholders
     template_id = profilAPIActuel.get('template_id', '')
-    curl_exe = ""
+    provider = profilAPIActuel.get('name', '').lower()
+    template_type = profilAPIActuel.get('template_type', 'chat')
     
-    if template_id:
-        template_content = config_manager.load_template(template_id)
-        if template_content:
-            curl_exe = template_content
-        else:
-            curl_exe = profilAPIActuel.get('curl_exe', '')
-    else:
-        curl_exe = profilAPIActuel.get('curl_exe', '')
+    # Construire l'ID du template selon la structure V2
+    if not template_id:
+        template_id = f"{provider}_{template_type}"
     
-    api_key = profilAPIActuel.get('api_key', '')
-    replace_apikey = profilAPIActuel.get('replace_apikey', 'GEMINI_API_KEY')
+    print(f"[DEBUG] Provider: {provider}")
+    print(f"[DEBUG] Template ID: {template_id}")
+    print(f"[DEBUG] Template type: {template_type}")
+    print(f"[DEBUG] Final prompt: {final_prompt[:100]}...")
     
-    # Détection OS
+    # Détection OS (toujours nécessaire pour la suite)
     os_type = platform.system().lower()
     is_windows = os_type == 'windows'
     
-    print(f"[DEBUG] OS détecté: {os_type}")
-    print(f"[DEBUG] template_id: {template_id}")
-    print(f"[DEBUG] Template length: {len(curl_exe)} chars")
-    print(f"[DEBUG] final_prompt: {final_prompt[:100]}...")
-
-    # Remplacer la clé API
-    if replace_apikey and replace_apikey in curl_exe:
-        curl_exe = curl_exe.replace(replace_apikey, api_key)
+    # NOUVEAU: Utiliser get_processed_template avec remplacement des placeholders
+    curl_exe = api_manager.get_processed_template(template_id, profilAPIActuel, final_prompt)
+    
+    if not curl_exe:
+        print(f"[ERROR] Aucun template trouvé pour {template_id}")
+        # Fallback vers l'ancien système si nécessaire
+        curl_exe = profilAPIActuel.get('curl_exe', '')
+        api_key = profilAPIActuel.get('api_key', '')
+        replace_apikey = profilAPIActuel.get('replace_apikey', 'GEMINI_API_KEY')
+        
+        if replace_apikey and replace_apikey in curl_exe:
+            curl_exe = curl_exe.replace(replace_apikey, api_key)
+            print(f"[DEBUG] Fallback - ancien système utilisé")
+    else:
+        print(f"[DEBUG] Template traité avec succès ({len(curl_exe)} chars)")
         print(f"[DEBUG] Clé API remplacée")
 
     try:
-        # MÉTHODE SIMPLIFIÉE ET ROBUSTE pour templates multi-lignes
-        # Pattern pour trouver -d suivi d'un guillemet
-        pattern = r"-d\s+(['\"])(.*?)\1"
+        # MÉTHODE CORRIGÉE pour templates multi-lignes avec JSON complexe
+        # Pattern modifié pour gérer les JSON avec guillemets internes
+        # Utilisation d'une approche plus robuste
         
-        # Chercher avec DOTALL pour gérer les multi-lignes
-        match = re.search(pattern, curl_exe, re.DOTALL)
+        # Trouver la position de -d et la quote ouvrante
+        d_match = re.search(r"-d\s+(['\"])", curl_exe)
         
-        if match:
-            quote_char = match.group(1)
-            json_content = match.group(2)
+        if d_match:
+            quote_char = d_match.group(1)
+            d_start = d_match.end() - 1  # Position de la quote ouvrante
             
-            print(f"[DEBUG] JSON extrait ({len(json_content)} chars)")
+            # Trouver la quote fermante correspondante en gérant les échappements
+            quote_end = -1
+            i = d_start + 1
             
-            try:
-                # Parser le JSON
-                json_data = json.loads(json_content)
+            while i < len(curl_exe):
+                if curl_exe[i] == quote_char:
+                    # Vérifier si c'est une quote échappée
+                    escaped = False
+                    j = i - 1
+                    backslash_count = 0
+                    while j >= 0 and curl_exe[j] == '\\':
+                        backslash_count += 1
+                        j -= 1
+                    
+                    # Si nombre impair de backslashes, la quote est échappée
+                    if backslash_count % 2 == 0:
+                        quote_end = i
+                        break
+                i += 1
+            
+            if quote_end > d_start:
+                json_content = curl_exe[d_start + 1:quote_end]
+                print(f"[DEBUG] JSON extrait ({len(json_content)} chars)")
                 
-                # Modifier selon la structure API
-                if 'messages' in json_data and isinstance(json_data['messages'], list):
-                    # Format OpenAI/Claude
-                    for message in reversed(json_data['messages']):
-                        if message.get('role') == 'user':
-                            message['content'] = final_prompt
-                            print(f"[DEBUG] Prompt OpenAI mis à jour")
-                            break
-                elif 'contents' in json_data:
-                    # Format Gemini
-                    if isinstance(json_data['contents'], list) and len(json_data['contents']) > 0:
-                        if 'parts' in json_data['contents'][0]:
-                            if isinstance(json_data['contents'][0]['parts'], list):
-                                json_data['contents'][0]['parts'][0]['text'] = final_prompt
-                                print(f"[DEBUG] Prompt Gemini mis à jour")
-                elif 'prompt' in json_data:
-                    # Format simple
-                    json_data['prompt'] = final_prompt
-                    print(f"[DEBUG] Prompt simple mis à jour")
-                
-                # Régénérer le JSON avec indentation
-                new_json = json.dumps(json_data, ensure_ascii=False, indent=2)
-                
-                # Échappement selon l'OS
-                if is_windows:
-                    # Windows: échapper les guillemets pour cmd
-                    escaped_json = new_json.replace('"', '\\"')
-                    new_data_part = f'-d "{escaped_json}"'
-                else:
-                    # Linux/macOS: utiliser guillemets simples
-                    escaped_json = new_json.replace("'", "'\"'\"'")
-                    new_data_part = f"-d '{escaped_json}'"
-                
-                # Remplacer la section complète
-                curl_nouveau = curl_exe.replace(match.group(0), new_data_part)
-                
-                print(f"[DEBUG] Template traité avec succès")
-                return curl_nouveau
-                
-            except json.JSONDecodeError as e:
-                print(f"[DEBUG] Erreur JSON: {e}")
+                try:
+                    # Parser le JSON (déséchapper si nécessaire)
+                    json_to_parse = json_content
+                    if quote_char == '"' and '\\' in json_to_parse:
+                        # Déséchapper pour parsing
+                        json_to_parse = json_to_parse.replace('\\"', '"').replace('\\\\', '\\')
+                    
+                    json_data = json.loads(json_to_parse)
+                    
+                    # Modifier selon la structure API
+                    if 'messages' in json_data and isinstance(json_data['messages'], list):
+                        # Format OpenAI/Claude
+                        for message in reversed(json_data['messages']):
+                            if message.get('role') == 'user':
+                                message['content'] = final_prompt
+                                print(f"[DEBUG] Prompt OpenAI mis à jour")
+                                break
+                    elif 'contents' in json_data:
+                        # Format Gemini
+                        if isinstance(json_data['contents'], list) and len(json_data['contents']) > 0:
+                            if 'parts' in json_data['contents'][0]:
+                                if isinstance(json_data['contents'][0]['parts'], list):
+                                    json_data['contents'][0]['parts'][0]['text'] = final_prompt
+                                    print(f"[DEBUG] Prompt Gemini mis à jour")
+                    elif 'prompt' in json_data:
+                        # Format simple
+                        json_data['prompt'] = final_prompt
+                        print(f"[DEBUG] Prompt simple mis à jour")
+                    
+                    # Régénérer le JSON avec indentation
+                    new_json = json.dumps(json_data, ensure_ascii=False, indent=2)
+                    
+                    # Échappement selon l'OS
+                    if is_windows:
+                        # Windows: échapper les guillemets pour cmd
+                        escaped_json = new_json.replace('"', '\\"')
+                        new_data_part = f'-d "{escaped_json}"'
+                    else:
+                        # Linux/macOS: utiliser guillemets simples
+                        escaped_json = new_json.replace("'", "'\"'\"'")
+                        new_data_part = f"-d '{escaped_json}'"
+                    
+                    # Remplacer la section complète
+                    original_data_part = curl_exe[d_match.start():quote_end + 1]
+                    curl_nouveau = curl_exe.replace(original_data_part, new_data_part)
+                    
+                    print(f"[DEBUG] Template traité avec succès")
+                    return curl_nouveau
+                    
+                except json.JSONDecodeError as e:
+                    print(f"[DEBUG] Erreur parsing JSON: {e}")
+                    # En cas d'erreur JSON, continuer avec l'original
+                    print(f"[DEBUG] Conservation du JSON original")
+                    return curl_exe
+            else:
+                print(f"[DEBUG] Quote fermante non trouvée")
+                return curl_exe
+        else:
+            print(f"[DEBUG] Pattern -d non trouvé")
                 
         # FALLBACK: Recherche et remplacement simple
         print(f"[DEBUG] Utilisation fallback")
@@ -349,311 +467,15 @@ def preparer_requete_curl(final_prompt):
 
 
 def corriger_commande_curl(commande):
-    """
-    Corrige une commande curl de manière robuste et multiplateforme.
-    Fonctionne sur Windows, Linux et macOS.
-    """
-    import json
+    """Fonction temporaire simplifiée"""
     import re
-    import platform
-    
-    # Détection de l'OS
-    os_type = platform.system().lower()
-    is_windows = os_type == 'windows'
-    
-    print(f"[DEBUG] Correction curl pour OS: {os_type}")
-    print(f"[DEBUG] Commande avant correction: {commande[:200]}...")
+    if not commande:
+        return commande
+    print("[DEBUG] Correction curl simplifiée")
+    corrected = commande.replace('\\\n', ' ').replace('\n', ' ')
+    corrected = re.sub(r'\s+', ' ', corrected).strip()
+    return corrected
 
-    try:
-        # Nettoyer la commande des continuations de ligne
-        commande_corrigee = commande.replace('\\\n', '').replace('\n', '').strip()
-        print(f"[DEBUG] Après nettoyage continuations: {commande_corrigee[:200]}...")
-
-        # Normaliser les en-têtes selon l'OS
-        if is_windows:
-            # Windows: préférer les guillemets doubles
-            commande_corrigee = re.sub(r"-H\s+['\"]([^'\"]*)['\"]", r'-H "\1"', commande_corrigee)
-        else:
-            # Linux/macOS: préférer les guillemets simples pour bash
-            commande_corrigee = re.sub(r"-H\s+['\"]([^'\"]*)['\"]", r"-H '\1'", commande_corrigee)
-        
-        print(f"[DEBUG] Après normalisation en-têtes: {commande_corrigee[:200]}...")
-
-        # Traitement robuste de la partie JSON selon l'OS
-        if is_windows:
-            # Windows: chercher JSON entre guillemets doubles
-            json_match = re.search(r'-d\s+"(.+?)"(?:\s|$)', commande_corrigee, re.DOTALL)
-        else:
-            # Linux/macOS: chercher JSON entre guillemets simples ou doubles
-            json_match = re.search(r"-d\s+['\"](.+?)['\"](?:\s|$)", commande_corrigee, re.DOTALL)
-        
-        if json_match:
-            json_string = json_match.group(1)
-            print(f"[DEBUG] JSON extrait pour correction: {json_string}")
-            
-            try:
-                # Pour Windows, dé-échapper d'abord si nécessaire
-                if is_windows:
-                    json_clean = json_string.replace('\\"', '"')
-                else:
-                    # Pour Linux/macOS, gérer les échappements bash
-                    json_clean = json_string.replace("'\"'\"'", "'")
-                
-                # Tenter de parser et re-sérialiser proprement
-                json_data = json.loads(json_clean)
-                json_propre = json.dumps(json_data, ensure_ascii=False, separators=(',', ':'))
-                
-                print(f"[DEBUG] JSON nettoyé et re-sérialisé: {json_propre}")
-                
-                # Ré-échapper selon l'OS
-                if is_windows:
-                    json_escaped = json_propre.replace('"', '\\"')
-                    commande_corrigee = commande_corrigee.replace(
-                        json_match.group(0), 
-                        f'-d "{json_escaped}"'
-                    )
-                else:
-                    json_escaped = json_propre.replace("'", "'\"'\"'")
-                    commande_corrigee = commande_corrigee.replace(
-                        json_match.group(0), 
-                        f"-d '{json_escaped}'"
-                    )
-                
-                print(f"[DEBUG] JSON corrigé et remplacé: {commande_corrigee[:200]}...")
-                
-            except json.JSONDecodeError:
-                print("[DEBUG] JSON non parsable, nettoyage manuel intelligent")
-                
-                # Nettoyage manuel adapté à l'OS
-                if is_windows:
-                    # Windows: gérer les échappements Windows
-                    json_cleaned = (json_string
-                                  .replace('\\"', '"')      # Dé-échapper temporairement
-                                  .replace('\\\\', '\\')    # Simplifier backslashes
-                                  .replace('\n', '\\n')     # Échapper nouvelles lignes
-                                  .replace('\r', '\\r')     # Échapper retours chariot
-                                  .replace('\t', '\\t'))    # Échapper tabulations
-                    
-                    # Ré-échapper pour Windows
-                    json_cleaned = json_cleaned.replace('"', '\\"')
-                    commande_corrigee = commande_corrigee.replace(
-                        json_match.group(0), 
-                        f'-d "{json_cleaned}"'
-                    )
-                else:
-                    # Linux/macOS: nettoyage pour bash
-                    json_cleaned = (json_string
-                                  .replace("'\"'\"'", "'")  # Dé-échapper bash
-                                  .replace('\n', '\\n')     # Échapper nouvelles lignes
-                                  .replace('\r', '\\r')     # Échapper retours chariot
-                                  .replace('\t', '\\t'))    # Échapper tabulations
-                    
-                    # Ré-échapper pour bash
-                    json_cleaned = json_cleaned.replace("'", "'\"'\"'")
-                    commande_corrigee = commande_corrigee.replace(
-                        json_match.group(0), 
-                        f"-d '{json_cleaned}'"
-                    )
-                
-                print(f"[DEBUG] Nettoyage manuel appliqué: {commande_corrigee[:200]}...")
-
-        else:
-            print("[DEBUG] Aucune section -d trouvée dans la commande")
-
-        # Vérification finale et normalisation selon l'OS
-        if is_windows:
-            # Windows: s'assurer que les URLs sont entre guillemets doubles
-            commande_corrigee = re.sub(r'curl\s+[\'"]([^\'"]*)[\'"]', r'curl "\1"', commande_corrigee)
-        else:
-            # Linux/macOS: préférer les guillemets simples pour les URLs
-            commande_corrigee = re.sub(r'curl\s+[\'"]([^\'"]*)[\'"]', r"curl '\1'", commande_corrigee)
-        
-        print(f"[DEBUG] Commande finale corrigée ({os_type}): {commande_corrigee[:200]}...")
-        return commande_corrigee
-
-    except Exception as e:
-        print(f"[DEBUG] Erreur dans corriger_commande_curl: {e}")
-        # En cas d'erreur, retourner la commande originale nettoyée au minimum
-        commande_securisee = commande.replace('\\\n', '').replace('\n', '').strip()
-        return commande_securisee
-
-def charger_profil_api():
-    """
-    Charge le profil API par défaut ou retourne Gemini si aucun n'est défini.
-    """
-    nom_profil_charge, profil = selectionProfilDefaut()
-    return profil
-
-def generer_prompt(question, profil):
-    """
-    Génère le prompt à partir de la question et du profil API.
-    """
-    role = profil.get('role', '').strip() or "pédagogue"
-    behavior = profil.get('behavior', '').strip() or "Précis, synthétique, court avec un résumé en bullet point."
-    return (
-        f"En tant que {role}, à la fois expert, pédagogue et synthétique, nous attendons de toi le comportement suivant : {behavior}. "
-        f"Ma question est la suivante : {question}"
-    )
-
-def generer_fichier_development(nom_fichier, extension, reponse):
-    """
-    Génère un fichier de développement avec gestion de collision avancée.
-    """
-    try:
-        # Validation des paramètres
-        if not nom_fichier.strip():
-            return False
-        
-        # Créer le nom complet du fichier
-        nom_complet = f"{nom_fichier.strip()}{extension}"
-        chemin_fichier = os.path.join(DEVELOPMENT_DIR, nom_complet)
-        
-        # Vérifier si le fichier existe déjà
-        if os.path.exists(chemin_fichier):
-            # Créer une fenêtre personnalisée pour les options
-            choix_window = tk.Toplevel()
-            choix_window.title("Fichier existant")
-            choix_window.geometry("400x200")
-            choix_window.grab_set()  # Rendre la fenêtre modale
-            choix_window.transient()
-            
-            # Centrer la fenêtre
-            choix_window.update_idletasks()
-            x = (choix_window.winfo_screenwidth() // 2) - (400 // 2)
-            y = (choix_window.winfo_screenheight() // 2) - (200 // 2)
-            choix_window.geometry(f"400x200+{x}+{y}")
-            
-            choix_utilisateur = {"action": None}
-            
-            # Message
-            label_message = ttk.Label(choix_window, 
-                                    text=f"Le fichier '{nom_complet}' existe déjà.\nQue souhaitez-vous faire ?",
-                                    font=("Arial", 10),
-                                    justify="center")
-            label_message.pack(pady=20)
-            
-            # Frame pour les boutons
-            frame_boutons = ttk.Frame(choix_window)
-            frame_boutons.pack(pady=10)
-            
-            def choisir_remplacer():
-                choix_utilisateur["action"] = "remplacer"
-                choix_window.destroy()
-            
-            def choisir_ajouter():
-                choix_utilisateur["action"] = "ajouter"
-                choix_window.destroy()
-            
-            def choisir_annuler():
-                choix_utilisateur["action"] = "annuler"
-                choix_window.destroy()
-            
-            # Boutons
-            bouton_remplacer = ttk.Button(frame_boutons, text="Remplacer", command=choisir_remplacer)
-            bouton_remplacer.pack(side="left", padx=10)
-            
-            bouton_ajouter = ttk.Button(frame_boutons, text="Ajouter à la fin", command=choisir_ajouter)
-            bouton_ajouter.pack(side="left", padx=10)
-            
-            bouton_annuler = ttk.Button(frame_boutons, text="Annuler", command=choisir_annuler)
-            bouton_annuler.pack(side="left", padx=10)
-            
-            # Attendre que l'utilisateur fasse un choix
-            choix_window.wait_window()
-            
-            # Traiter le choix
-            if choix_utilisateur["action"] == "annuler" or choix_utilisateur["action"] is None:
-                return False
-            elif choix_utilisateur["action"] == "remplacer":
-                mode_ecriture = 'w'
-            elif choix_utilisateur["action"] == "ajouter":
-                mode_ecriture = 'a'
-                # Ajouter simplement une ligne vide pour séparer le contenu
-                reponse = f"\n\n{reponse}"
-        else:
-            mode_ecriture = 'w'
-        
-        # Écrire le fichier selon le mode choisi
-        with open(chemin_fichier, mode_ecriture, encoding='utf-8') as fichier:
-            fichier.write(reponse)
-        
-        # Message de succès adapté
-        if os.path.exists(chemin_fichier) and mode_ecriture == 'a':
-            message_succes = f"Contenu ajouté avec succès à la fin du fichier '{nom_complet}'."
-        else:
-            message_succes = f"Fichier '{nom_complet}' enregistré avec succès dans le dossier development."
-        
-        logging.info(f"Fichier développement généré avec succès : {chemin_fichier} (mode: {mode_ecriture})")
-        messagebox.showinfo("Succès", message_succes)
-        return True
-        
-    except Exception as e:
-        logging.error(f"Erreur lors de la génération du fichier développement : {e}")
-        messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde : {e}")
-        return False
-
-def generer_fichier_simple(question, reponse, profil):
-    """
-    Génère un fichier en mode simple selon la configuration du profil.
-    """
-    try:
-        file_generation_config = profil.get('file_generation', {})
-        
-        # Vérifier si la génération est activée et en mode simple
-        if not file_generation_config.get('enabled', False):
-            return
-        
-        if file_generation_config.get('mode', 'simple') != 'simple':
-            return
-        
-        simple_config = file_generation_config.get('simple_config', {})
-        
-        # Récupérer les options de configuration
-        include_question = simple_config.get('include_question', True)
-        include_response = simple_config.get('include_response', True)
-        base_filename = simple_config.get('base_filename', 'conversation')
-        same_file = simple_config.get('same_file', True)
-        
-        # Vérifier qu'au moins une option de contenu est activée
-        if not (include_question or include_response):
-            return
-        
-        # Préparer le contenu
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        contenu_lines = [f"=== Conversation du {timestamp} ==="]
-        
-        if include_question and question.strip():
-            contenu_lines.append(f"Question : {question}")
-        
-        if include_response and reponse.strip():
-            contenu_lines.append(f"Réponse : {reponse}")
-        
-        contenu_lines.append("=" * 50)
-        contenu_lines.append("")  # Ligne vide pour séparer les conversations
-        
-        contenu = "\n".join(contenu_lines)
-        
-        # Déterminer le nom du fichier
-        if same_file:
-            # Fichier unique
-            nom_fichier = f"{base_filename}.txt"
-        else:
-            # Fichier avec timestamp
-            timestamp_fichier = datetime.now().strftime("%Y%m%d_%H%M%S")
-            nom_fichier = f"{base_filename}_{timestamp_fichier}.txt"
-        
-        chemin_fichier = os.path.join(CONVERSATIONS_DIR, nom_fichier)
-        
-        # Écrire le fichier
-        mode = 'a' if same_file else 'w'  # Append si même fichier, Write si nouveau fichier
-        with open(chemin_fichier, mode, encoding='utf-8') as fichier:
-            fichier.write(contenu)
-        
-        logging.info(f"Fichier généré avec succès : {chemin_fichier}")
-        
-    except Exception as e:
-        logging.error(f"Erreur lors de la génération du fichier : {e}")
 
 def executer_commande_curl(requete_curl):
     """
@@ -762,9 +584,28 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
 
             if parser:
                 # === NOUVEAU SYSTÈME ÉVOLUTIF ===
-                success, texte_cible, api_detectee = parser.parse_response(reponse_json, 'auto')
+                # PHASE 3: Récupérer le provider correctement depuis le template_id ou name
+                profil = charger_profil_api()
+                
+                # Essayer d'abord avec template_id (ex: "gemini_chat" -> "gemini")
+                template_id = profil.get('template_id', '')
+                if template_id and '_' in template_id:
+                    provider = template_id.split('_')[0].lower()
+                else:
+                    # Fallback sur name en minuscules
+                    provider = profil.get('name', '').lower() if profil else 'auto'
+                
+                print(f"[DEBUG] Provider détecté: {provider} (template_id: {template_id})")
+                
+                success, texte_cible, api_detectee = parser.parse_response(reponse_json, provider)
+                
+                if not success and provider != 'auto':
+                    # Fallback vers auto si le provider spécifique échoue
+                    print(f"[DEBUG] Parsing {provider} échoué, essai avec auto...")
+                    success, texte_cible, api_detectee = parser.parse_response(reponse_json, 'auto')
                 
                 if success:
+                    print(f"[DEBUG] Parsing réussi avec provider: {api_detectee}")
                     print(f"🎯 API détectée: {api_detectee}")
                     print(f"📝 Texte extrait: {texte_cible[:100]}...")
                     
@@ -776,7 +617,6 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
                     
                     # Génération de fichier si activée
                     question_originale = champ_q.get('1.0', tk.END).strip()
-                    profil = charger_profil_api()
                     generer_fichier_simple(question_originale, texte_cible_corrige, profil)
                     
                     # Supprimer le contenu du prompteur Q
@@ -864,12 +704,25 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                         try:
                             reponse_json = json.loads(resultat.stdout)
                             
-                            # Utiliser le nouveau système de parsing
+                            # Utiliser le nouveau système de parsing avec provider spécifique
                             try:
                                 from api_response_parser import get_response_parser
                                 parser = get_response_parser()
-                                success, texte, api_type = parser.parse_response(reponse_json, 'auto')
-                                return texte if success else "Erreur lors du résumé"
+                                
+                                # PHASE 3: Récupérer le provider correctement depuis template_id
+                                template_id = profil.get('template_id', '')
+                                if template_id and '_' in template_id:
+                                    provider = template_id.split('_')[0].lower()
+                                else:
+                                    provider = profil.get('name', '').lower()
+                                
+                                success, texte, api_type = parser.parse_response(reponse_json, provider)
+                                
+                                if not success and provider != 'auto':
+                                    # Fallback vers auto seulement si le provider spécifique échoue
+                                    success, texte, api_type = parser.parse_response(reponse_json, 'auto')
+                                
+                                return texte if success else f"Erreur parsing {provider}: {texte}"
                             except ImportError:
                                 # Fallback ancien système
                                 return reponse_json["candidates"][0]["content"]["parts"][0]["text"]
@@ -899,10 +752,24 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
             prompt_complet = ""
             for msg in api_messages:
                 role_label = "Utilisateur" if msg['role'] == 'user' else "Assistant"
-                prompt_complet += f"{role_label}: {msg['parts'][0]['text']}\n"
+                prompt_complet += f"{role_label}: {msg['parts'][0]['text']}\\n"  # CORRECTION: \\n au lieu de \n
             
             # Utiliser le prompt complet au lieu de la question simple
             question_finale = prompt_complet.strip()
+            
+            # ÉCHAPPEMENT JSON : Échapper l'historique concaténé pour injection JSON sécurisée
+            if conversation_manager:
+                question_finale = conversation_manager.escape_for_json_template(question_finale)
+                print(f"[DEBUG] Historique échappé pour JSON ({len(question_finale)} chars)")
+                
+                # VALIDATION JSON : Vérifier que l'historique échappé est valide pour JSON
+                is_valid, error_msg = conversation_manager.validate_json_for_template(question_finale)
+                if not is_valid:
+                    champ_r.insert('1.0', f"❌ Erreur validation JSON historique: {error_msg}\n")
+                    print(f"[ERROR] Validation JSON échouée: {error_msg}")
+                    return
+                else:
+                    print(f"[DEBUG] Validation JSON historique réussie")
         else:
             # Fallback vers l'ancienne méthode si pas de ConversationManager
             historique = champ_history.get('1.0', tk.END).strip()
@@ -913,22 +780,88 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
 
         # 5. Exécuter l'appel API principal
         profil = charger_profil_api()
-        prompt_concatene = generer_prompt(question_finale, profil)
-        requete_curl = preparer_requete_curl(prompt_concatene)
-        requete_curl = corriger_commande_curl(requete_curl)
+        
+        # CORRECTION: Ne pas utiliser generer_prompt() avec le système de templates moderne
+        # Le template gère déjà les placeholders {{SYSTEM_PROMPT_ROLE}} et {{SYSTEM_PROMPT_BEHAVIOR}}
+        # generer_prompt() était pour l'ancien système sans templates
+        requete_curl = preparer_requete_curl(question_finale)
+        
+        # SOLUTION FINALE : Ne plus jamais utiliser corriger_commande_curl() 
+        # Le système APIManager génère des commandes curl parfaites pour Windows
+        # La fonction corriger_commande_curl() était pour l'ancien système et casse les templates modernes
+        print("[DEBUG] Skip correction curl - Template APIManager déjà parfait pour Windows")
+        
+        # CONVERSION WINDOWS AMÉLIORÉE : Conversion spécifique PowerShell avec gestion guillemets
+        if platform.system().lower() == 'windows':
+            # Convertir les continuations \ en ligne unique pour PowerShell
+            requete_curl = requete_curl.replace('\\\n', ' ').replace('\n', ' ')
+            # Nettoyer les espaces multiples
+            import re
+            requete_curl = re.sub(r'\s+', ' ', requete_curl).strip()
+            
+            # CORRECTION GUILLEMETS WINDOWS: 
+            # 1. Remplacer guillemets simples par doubles pour headers
+            requete_curl = requete_curl.replace("-H 'Content-Type: application/json'", '-H "Content-Type: application/json"')
+            
+            # 2. Remplacer guillemets simples par doubles pour JSON et échapper contenu
+            if " -d '{" in requete_curl and requete_curl.endswith("}'"):
+                start_json = requete_curl.find(" -d '{") + 5
+                json_part = requete_curl[start_json:-2]
+                json_escaped = json_part.replace('"', '\\"')
+                prefix = requete_curl[:requete_curl.find(" -d '{")]
+                requete_curl = f'{prefix} -d "{{{json_escaped}}}"'
+            
+            print("[DEBUG] Conversion Windows PowerShell complète appliquée")
+        
+        # ÉTAPE 2 DEBUG : Journaliser la requête JSON finale
+        print("=" * 60)
+        print("🔍 ÉTAPE 2 - REQUÊTE JSON FINALE")
+        print("=" * 60)
+        print(f"Question finale (après échappement): {len(question_finale)} chars")
+        print(f"Requête curl: {len(requete_curl)} chars")
+        print("")
+        print("CONTENU question_finale:")
+        print(question_finale[:500] + "..." if len(question_finale) > 500 else question_finale)
+        print("")
+        print("REQUÊTE CURL COMPLÈTE:")
+        print(requete_curl)
+        print("=" * 60)
         
         resultat = executer_commande_curl(requete_curl)
+        
+        # ÉTAPE 2 DEBUG : Journaliser la réponse brute
+        print("=" * 60)
+        print("🔍 RÉPONSE API BRUTE")
+        print("=" * 60)
+        print(f"Return code: {resultat.returncode}")
+        if resultat.returncode == 0:
+            print(f"Stdout length: {len(resultat.stdout)} chars")
+            print("RÉPONSE JSON BRUTE:")
+            print(resultat.stdout[:1000] + "..." if len(resultat.stdout) > 1000 else resultat.stdout)
+        else:
+            print(f"Stderr: {resultat.stderr}")
+        print("=" * 60)
         
         # 6. Traiter la réponse
         if resultat.returncode == 0:
             try:
                 reponse_json = json.loads(resultat.stdout)
                 
-                # Utiliser le nouveau système de parsing évolutif
+                # Utiliser le nouveau système de parsing évolutif avec provider spécifique
                 try:
                     from api_response_parser import get_response_parser
                     parser = get_response_parser()
-                    success, texte_reponse, api_detectee = parser.parse_response(reponse_json, 'auto')
+                    
+                    # PHASE 2: Utiliser le provider spécifique du profil
+                    provider = profil.get('name', '').lower()
+                    success, texte_reponse, api_detectee = parser.parse_response(reponse_json, provider)
+                    
+                    if not success and provider != 'auto':
+                        # Fallback vers auto seulement si le provider spécifique échoue
+                        print(f"[DEBUG] Parsing {provider} échoué, essai avec auto...")
+                        success, texte_reponse, api_detectee = parser.parse_response(reponse_json, 'auto')
+                    
+                    print(f"[DEBUG] Parsing réussi avec provider: {api_detectee}")
                     
                     if not success:
                         # Si le parsing échoue, afficher l'erreur
@@ -1109,28 +1042,31 @@ def ouvrir_fenetre_apitest():
         template_type = profil.get('template_type', 'chat')
         provider = profil.get('name', '').lower()
         
-        # Nouveau système V2 : templates typés
+        # PHASE 3.1.2: Utiliser APIManager centralisé pour tous les templates
         if method == 'curl':
-            # Essayer d'abord la nouvelle structure typée
-            template_content = config_manager.load_typed_template(provider, template_type, 'curl')
+            # Construire l'ID du template selon la structure V2
+            template_id = f"{provider}_{template_type}"
             
+            # NOUVEAU: Utiliser get_processed_template avec placeholders (Phase 2)
+            template_content = api_manager.get_processed_template(template_id, profil, "Test API message")
+            
+            # Fallback vers template_id du profil si nécessaire
             if not template_content:
-                # Fallback vers l'ancienne structure
                 template_id = profil.get('template_id', '')
                 if template_id:
-                    template_content = config_manager.load_template(template_id)
+                    template_content = api_manager.get_processed_template(template_id, profil, "Test API message")
             
             if template_content:
-                # Remplacer la clé API dans le template
-                api_key = profil.get('api_key', '')
-                replace_key = profil.get('replace_apikey', 'GEMINI_API_KEY')
-                if api_key and replace_key:
-                    return template_content.replace(replace_key, api_key)
+                print(f"[DEBUG] Template traité avec placeholders: {template_content[:200]}...")
                 return template_content
+            else:
+                print(f"[DEBUG] Aucun template trouvé pour {template_id}")
+                return ""
                 
         elif method == 'native':
-            # Pour le mode natif, charger le template Python
-            template_content = config_manager.load_typed_template(provider, template_type, 'native')
+            # PHASE 3.1.2: Pour le mode natif, utiliser APIManager centralisé
+            template_id = f"{provider}_{template_type}_native"
+            template_content = api_manager.get_template_content(template_id)
             if template_content:
                 return f"# Mode Native SDK - {provider.title()}\n{template_content}"
             else:
@@ -1411,9 +1347,9 @@ def open_setup_menu():
     screen_width = setup_window.winfo_screenwidth()
     screen_height = setup_window.winfo_screenheight()
     
-    # Taille optimale : plus compacte mais utilisable
-    optimal_width = min(550, int(screen_width * 0.7))
-    optimal_height = min(500, int(screen_height * 0.7))
+    # Taille optimale : augmentée pour accommoder le textarea curl
+    optimal_width = min(610, int(screen_width * 0.75))  # Augmenté de 580 à 610 (+5% supplémentaire)
+    optimal_height = min(600, int(screen_height * 0.75))  # Augmenté de 500 à 600
     
     # Centrer la fenêtre
     x = (screen_width // 2) - (optimal_width // 2)
@@ -1421,7 +1357,7 @@ def open_setup_menu():
     
     setup_window.geometry(f"{optimal_width}x{optimal_height}+{x}+{y}")
     setup_window.resizable(True, True)
-    setup_window.minsize(450, 400)  # Taille minimale utilisable
+    setup_window.minsize(520, 550)  # Taille minimale ajustée proportionnellement
     
     # Créer un canvas avec scrollbar pour gérer la hauteur
     canvas = tk.Canvas(setup_window)
@@ -1459,15 +1395,15 @@ def open_setup_menu():
 
     # Fonction pour charger les profils disponibles
     def charger_profils():
-        """Charge les profils via ConfigManager"""
-        return config_manager.list_profiles()
+        """Charge les profils via APIManager (Phase 2 - Refactorisation)"""
+        return api_manager.list_available_profiles()
 
     # Fonction pour charger les données d'un profil sélectionné
     def charger_donnees_profil(profil):
         """Charge un profil via ConfigManager avec fallback robuste"""
         try:
-            # Essayer d'abord de charger le profil tel quel
-            profile_data = config_manager.load_profile(profil)
+            # Essayer d'abord de charger le profil tel quel (via APIManager)
+            profile_data = api_manager.load_profile(profil)
             if profile_data:
                 return profile_data
             
@@ -1476,7 +1412,7 @@ def open_setup_menu():
                 try:
                     if not profil.endswith(extension):
                         test_profil = profil + extension
-                        profile_data = config_manager.load_profile(test_profil.replace(extension, ''))
+                        profile_data = api_manager.load_profile(test_profil.replace(extension, ''))
                         if profile_data:
                             return profile_data
                 except:
@@ -1522,10 +1458,11 @@ def open_setup_menu():
         default_profile_var.set(donnees_profil.get("default", False))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
         
-        # Charger le template curl au lieu de curl_exe
+        # Charger le template curl au lieu de curl_exe via APIManager
         template_id = donnees_profil.get("template_id", "")
         if template_id:
-            template_content = config_manager.load_template(template_id)
+            # PHASE 3.1.2: Utiliser APIManager centralisé
+            template_content = api_manager.get_template_content(template_id)
             curl_exe_var.set(template_content if template_content else "")
         else:
             # Fallback vers curl_exe pour compatibilité
@@ -1541,9 +1478,9 @@ def open_setup_menu():
 
     # Charger le profil par défaut au démarrage via ConfigManager
     def charger_profil_defaut():
-        """Charge le profil marqué comme défaut via ConfigManager."""
+        """Charge le profil marqué comme défaut via APIManager (Phase 2)."""
         try:
-            profil_defaut = config_manager.get_default_profile()
+            profil_defaut = api_manager.get_default_profile()
             if profil_defaut:
                 return profil_defaut.get('name', 'Gemini')
             return "Gemini"  # Fallback si aucun profil par défaut
@@ -1573,13 +1510,13 @@ def open_setup_menu():
         if method == "curl":
             # Mode curl : afficher les champs curl
             api_url_label.config(text="Texte à remplacer :")
-            curl_exe_label.grid(row=11, column=0, sticky="w", pady=5, padx=(10,5))
-            curl_exe_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+            curl_exe_label.grid(row=11, column=0, sticky="nw", pady=5, padx=(10,5))
+            curl_frame.grid(row=11, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
         elif method == "native (bientôt)":
             # Mode native : masquer commande curl, changer le label
             api_url_label.config(text="Paramètres template :")
             curl_exe_label.grid_remove()
-            curl_exe_entry.grid_remove()
+            curl_frame.grid_remove()
     
     # Lier la fonction au changement de méthode
     selected_method.trace('w', update_method_fields)
@@ -1607,7 +1544,7 @@ def open_setup_menu():
         if provider == "openai":
             models = ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
         elif provider == "gemini":
-            models = ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+            models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
         elif provider == "claude":
             models = ["claude-3-sonnet-20240229", "claude-3-opus-20240229", "claude-3-haiku-20240307"]
         
@@ -1683,12 +1620,44 @@ def open_setup_menu():
     replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var)
     replace_apikey_entry.grid(row=10, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
-    # Commande curl
+    # Commande curl - Textarea multi-lignes
     curl_exe_label = ttk.Label(scrollable_frame, text="Commande curl :")
-    curl_exe_label.grid(row=11, column=0, sticky="w", pady=3, padx=(10,5))
+    curl_exe_label.grid(row=11, column=0, sticky="nw", pady=3, padx=(10,5))
+    
+    # Frame pour le textarea avec scrollbar
+    curl_frame = ttk.Frame(scrollable_frame)
+    curl_frame.grid(row=11, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    curl_frame.grid_columnconfigure(0, weight=1)
+    
+    # Textarea avec scrollbar verticale
+    curl_exe_text = tk.Text(curl_frame, height=5, width=50, wrap=tk.WORD)
+    curl_exe_scrollbar = ttk.Scrollbar(curl_frame, orient="vertical", command=curl_exe_text.yview)
+    curl_exe_text.configure(yscrollcommand=curl_exe_scrollbar.set)
+    
+    curl_exe_text.grid(row=0, column=0, sticky="ew")
+    curl_exe_scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    # Variable pour compatibilité avec le code existant
     curl_exe_var = tk.StringVar(value="")
-    curl_exe_entry = ttk.Entry(scrollable_frame, textvariable=curl_exe_var, width=50)
-    curl_exe_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    
+    # Fonctions helper pour synchroniser StringVar avec Text widget
+    def set_curl_text(value):
+        """Met à jour le contenu du Text widget"""
+        curl_exe_text.delete(1.0, tk.END)
+        curl_exe_text.insert(1.0, value)
+        original_set(value)  # Utiliser la méthode originale pour éviter la récursion
+    
+    def get_curl_text():
+        """Récupère le contenu du Text widget"""
+        content = curl_exe_text.get(1.0, tk.END).rstrip('\n')
+        original_set(content)  # Utiliser la méthode originale
+        return content
+    
+    # Redéfinir les méthodes de la StringVar pour utiliser le Text widget
+    original_set = curl_exe_var.set
+    original_get = curl_exe_var.get
+    curl_exe_var.set = set_curl_text
+    curl_exe_var.get = get_curl_text
 
     # Charger le profil par défaut au démarrage
     profil_defaut = charger_profil_defaut()
@@ -1702,10 +1671,11 @@ def open_setup_menu():
         default_profile_var.set(donnees_profil.get("default", False))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
         
-        # Charger le template curl au lieu de curl_exe
+        # Charger le template curl au lieu de curl_exe via APIManager
         template_id = donnees_profil.get("template_id", "")
         if template_id:
-            template_content = config_manager.load_template(template_id)
+            # PHASE 3.1.2: Utiliser APIManager centralisé
+            template_content = api_manager.get_template_content(template_id)
             curl_exe_var.set(template_content if template_content else "")
         else:
             # Fallback vers curl_exe pour compatibilité
@@ -1808,13 +1778,17 @@ def open_setup_menu():
 
     # Frame pour disposer les boutons côte à côte
     boutons_frame = ttk.Frame(scrollable_frame)
-    boutons_frame.grid(row=12, column=0, columnspan=3, pady=20, padx=(10,10))
+    boutons_frame.grid(row=12, column=0, columnspan=3, pady=(20,40), padx=(10,10))
     
     bouton_enregistrer = ttk.Button(boutons_frame, text="Enregistrer", command=enregistrer_configuration)
     bouton_enregistrer.pack(side="left", padx=(0, 10))
 
     bouton_annuler = ttk.Button(boutons_frame, text="Annuler", command=setup_window.destroy)
     bouton_annuler.pack(side="left")
+    
+    # Espacement supplémentaire en bas pour assurer la visibilité des boutons
+    spacer_bottom = ttk.Label(scrollable_frame, text="")
+    spacer_bottom.grid(row=13, column=0, columnspan=3, pady=20)
 
     # Charger les données du profil par défaut au démarrage (sans event)
     try:
@@ -1829,11 +1803,12 @@ def open_setup_menu():
         default_profile_var.set(donnees_profil.get("default", False))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
         
-        # Charger le template curl
+        # Charger le template curl via APIManager
         template_id = donnees_profil.get("template_id", "")
         print(f"[DEBUG] Template ID trouvé: '{template_id}'")
         if template_id:
-            template_content = config_manager.load_template(template_id)
+            # PHASE 3.1.2: Utiliser APIManager centralisé
+            template_content = api_manager.get_template_content(template_id)
             print(f"[DEBUG] Template content chargé: {len(template_content) if template_content else 0} caractères")
             if template_content:
                 curl_exe_var.set(template_content)
@@ -1919,7 +1894,7 @@ def open_setup_file_menu():
     # Charger la configuration actuelle via ConfigManager
     def charger_config_actuelle():
         try:
-            profil_actuel = config_manager.get_default_profile()
+            profil_actuel = api_manager.get_default_profile()
             if profil_actuel and "file_generation" in profil_actuel:
                 config = profil_actuel["file_generation"]
                 enabled_var.set(config.get("enabled", False))
@@ -1986,7 +1961,7 @@ def open_setup_file_menu():
     
     # Titre avec nom de l'API par défaut
     try:
-        profil_defaut = config_manager.get_default_profile()
+        profil_defaut = api_manager.get_default_profile()
         nom_api = profil_defaut.get('name', 'API') if profil_defaut else "API"
     except:
         nom_api = "API"
@@ -2066,7 +2041,7 @@ def open_setup_file_menu():
     def enregistrer_config():
         try:
             # Charger le profil actuel via ConfigManager
-            profil_actuel = config_manager.get_default_profile()
+            profil_actuel = api_manager.get_default_profile()
             
             if not profil_actuel:
                 messagebox.showerror("Erreur", "Impossible de charger le profil actuel.")
@@ -2165,7 +2140,7 @@ def open_setup_history_menu():
     
     def update_profile_display():
         """Met à jour l'affichage du profil actuel"""
-        profil_actuel = config_manager.get_default_profile()
+        profil_actuel = api_manager.get_default_profile()
         if profil_actuel:
             nom_profil = profil_actuel.get('name', 'Inconnu')
             profile_label.config(text=f"Profil actuel: {nom_profil}")
@@ -2196,7 +2171,7 @@ def open_setup_history_menu():
         templates = ["Template par défaut"]  # Template par défaut avec nom plus clair
         try:
             # Récupérer TOUTES les APIs configurées (pas seulement celles avec historique activé)
-            api_profiles = config_manager.list_profiles()
+            api_profiles = api_manager.list_available_profiles()
             for api_name in api_profiles:
                 template_name = f"Template {api_name}"
                 if template_name not in templates:
@@ -2346,7 +2321,7 @@ def open_setup_history_menu():
             
             if selected_template == "Template par défaut":
                 # Utiliser le profil par défaut
-                profil_actuel = config_manager.get_default_profile()
+                profil_actuel = api_manager.get_default_profile()
                 if profil_actuel:
                     nom_profil = profil_actuel.get('name', 'Gemini')
                 else:
@@ -2414,7 +2389,7 @@ def open_setup_history_menu():
             
             if selected_template == "Template par défaut":
                 # Utiliser le profil par défaut
-                profil_actuel = config_manager.get_default_profile()
+                profil_actuel = api_manager.get_default_profile()
                 if profil_actuel:
                     nom_profil = profil_actuel.get('name', 'Gemini')
                 else:
@@ -2457,7 +2432,7 @@ def open_setup_history_menu():
             else:
                 # Créer un nouveau profil backup basé sur le profil principal
                 try:
-                    profil_principal = config_manager.load_profile(nom_profil)
+                    profil_principal = api_manager.load_profile(nom_profil)
                     if profil_principal:
                         backup_profile = profil_principal.copy()
                     else:
@@ -2537,7 +2512,7 @@ def open_setup_history_menu():
     update_profile_display()  
     
     # Définir le template initial basé sur le profil par défaut
-    profil_initial = config_manager.get_default_profile()
+    profil_initial = api_manager.get_default_profile()
     if profil_initial:
         nom_profil_initial = profil_initial.get('name', 'Gemini')
         template_var.set("Template par défaut")  # Commencer par défaut avec nouveau nom
@@ -2592,13 +2567,13 @@ def creer_interface():
             
             # 2. Créer les profils d'historique pour toutes les APIs configurées
             try:
-                api_profiles = config_manager.list_profiles()
+                api_profiles = api_manager.list_available_profiles()
                 for api_name in api_profiles:
                     api_profile_path = os.path.join(backup_dir, f"{api_name}.json")
                     
                     if not os.path.exists(api_profile_path):
                         # Charger le profil API principal
-                        api_data = config_manager.load_profile(api_name)
+                        api_data = api_manager.load_profile(api_name)
                         if api_data:
                             # Créer le profil d'historique basé sur l'API
                             history_profile = api_data.copy()

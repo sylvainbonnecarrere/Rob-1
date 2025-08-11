@@ -1,0 +1,18 @@
+curl https://openrouter.ai/api/v1/chat/completions \
+curl https://openrouter.ai/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+  -d '{
+  "model": "qwen/qwen3-30b-a3b-instruct-2507",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the meaning of life?"
+    },
+    { 
+      "role": 'assistant', 
+      "content": "I'm not sure, but my best guess is" 
+    }
+  ]
+  
+}'

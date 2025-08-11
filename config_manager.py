@@ -227,29 +227,44 @@ class ConfigManager:
             return False
     
     def save_template(self, template_id: str, template_content: str) -> bool:
-        """Sauvegarde un template de commande API (ancienne structure pour compatibilité)"""
+        """Sauvegarde un template de commande API - Version V2 compatible avec nouvelle architecture"""
         try:
-            file_path = os.path.join(self.templates_dir, "api_commands", f"{template_id}.txt")
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            # 1. Sauvegarder dans la nouvelle structure V2 (templates/chat/{provider}/curl.txt)
+            if '_chat' in template_id:
+                provider = template_id.replace('_chat', '')
+                v2_path = os.path.join(self.templates_dir, "chat", provider, "curl.txt")
+                os.makedirs(os.path.dirname(v2_path), exist_ok=True)
+                
+                with open(v2_path, 'w', encoding='utf-8') as f:
+                    f.write(template_content)
+                
+                self.logger.info(f"Template V2 sauvegardé: {v2_path}")
             
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(template_content)
-            
-            self.logger.info(f"Template {template_id} sauvegardé")
+            # PHASE 3.1.2: SUPPRESSION de la compatibilité api_commands (obsolète)
+            # Plus de sauvegarde legacy - Architecture V2 uniquement
+            self.logger.info(f"Template sauvegardé uniquement en V2 (api_commands supprimé)")
             return True
         except Exception as e:
             self.logger.error(f"Erreur sauvegarde template {template_id} : {e}")
             return False
     
     def load_template(self, template_id: str) -> Optional[str]:
-        """Charge un template de commande API (ancienne structure pour compatibilité)"""
+        """Charge un template de commande API - Version V2 compatible avec nouvelle architecture"""
         try:
-            file_path = os.path.join(self.templates_dir, "api_commands", f"{template_id}.txt")
-            if not os.path.exists(file_path):
-                return None
+            # 1. Essayer d'abord la nouvelle structure V2 (templates/chat/{provider}/curl.txt)
+            if '_chat' in template_id:
+                provider = template_id.replace('_chat', '')
+                v2_path = os.path.join(self.templates_dir, "chat", provider, "curl.txt")
+                if os.path.exists(v2_path):
+                    with open(v2_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    self.logger.info(f"Template V2 chargé: {v2_path}")
+                    return content
             
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
+            # PHASE 3.1.2: SUPPRESSION du fallback api_commands (obsolète)
+            # Plus de fallback legacy - Architecture V2 uniquement
+            self.logger.warning(f"Template {template_id} non trouvé dans V2 (api_commands supprimé)")
+            return None
         except Exception as e:
             self.logger.error(f"Erreur chargement template {template_id} : {e}")
             return None
@@ -278,11 +293,8 @@ class ConfigManager:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     return f.read()
             
-            # Fallback vers l'ancienne structure pour compatibilité
-            legacy_path = os.path.join(self.templates_dir, "api_commands", f"{provider}_{template_type}.txt")
-            if os.path.exists(legacy_path):
-                with open(legacy_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+            # PHASE 3.1.2: SUPPRESSION du fallback api_commands (obsolète)
+            # Plus de fallback legacy - Architecture V2 uniquement
             
             return None
         except Exception as e:
@@ -316,6 +328,75 @@ class ConfigManager:
         except Exception as e:
             self.logger.error(f"Erreur chargement template conversation {template_id} : {e}")
             return None
+    
+    def validate_template_placeholders(self, template_content: str, provider: str = "") -> Dict[str, List[str]]:
+        """
+        Valide et analyse les placeholders dans un template selon l'architecture V2
+        
+        Args:
+            template_content (str): Contenu du template
+            provider (str): Nom du provider (gemini, claude, etc.)
+            
+        Returns:
+            Dict contenant les placeholders trouvés par type
+        """
+        import re
+        
+        if not template_content:
+            return {"user_placeholders": [], "system_placeholders": [], "errors": []}
+        
+        result = {
+            "user_placeholders": [],
+            "system_placeholders": [],
+            "errors": []
+        }
+        
+        try:
+            # 1. Détecter les placeholders utilisateur (ex: GEMINI_API_KEY)
+            user_placeholder_patterns = [
+                r'\b([A-Z_]+_API_KEY)\b',  # GEMINI_API_KEY, CLAUDE_API_KEY, etc.
+                r'\b(API_KEY)\b',          # API_KEY générique
+                r'\b([A-Z_]+_TOKEN)\b'     # TOKENS divers
+            ]
+            
+            for pattern in user_placeholder_patterns:
+                matches = re.findall(pattern, template_content)
+                for match in matches:
+                    if match not in result["user_placeholders"]:
+                        result["user_placeholders"].append(match)
+            
+            # 2. Détecter les placeholders système (ex: {{model_id}})
+            system_placeholders = re.findall(r'\{\{([^}]+)\}\}', template_content)
+            result["system_placeholders"] = list(set(system_placeholders))
+            
+            # 3. Validation spécifique par provider
+            expected_user_placeholders = {
+                "gemini": ["GEMINI_API_KEY"],
+                "claude": ["CLAUDE_API_KEY"],
+                "openai": ["OPENAI_API_KEY"],
+                "kimi": ["KIMI_API_KEY"]
+            }
+            
+            expected_system_placeholders = ["model_id", "prompt_content"]
+            
+            if provider.lower() in expected_user_placeholders:
+                expected_user = expected_user_placeholders[provider.lower()]
+                found_expected = [p for p in result["user_placeholders"] if p in expected_user]
+                if not found_expected:
+                    result["errors"].append(f"Placeholder utilisateur attendu manquant: {expected_user}")
+            
+            # Vérifier les placeholders système essentiels
+            missing_system = [p for p in expected_system_placeholders if p not in result["system_placeholders"]]
+            if missing_system:
+                result["errors"].append(f"Placeholders système manquants: {missing_system}")
+            
+            self.logger.info(f"Validation template - User: {result['user_placeholders']}, System: {result['system_placeholders']}")
+            
+        except Exception as e:
+            result["errors"].append(f"Erreur validation placeholders: {e}")
+            self.logger.error(f"Erreur validation placeholders: {e}")
+        
+        return result
     
     def create_default_profiles(self) -> bool:
         """

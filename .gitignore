@@ -106,3 +106,142 @@ config_local.yaml
 # Lanceurs générés automatiquement (spécifiques à chaque machine)
 RUN.bat
 run.sh
+
+
+# ========================================
+# PHASE 3 - Fichiers temporaires et debug
+# ========================================
+
+# Scripts de debug Phase 3
+debug/diagnostic_phase*.json
+debug/corrections_phase*.json
+debug/validation_phase*.json
+debug/*.backup.phase*
+
+# Arborescences et rapports generes
+ARBORESCENCE_FINALE.txt
+arborescence_console.txt
+arborescence_finale.txt
+
+# Fichiers temporaires de developpement
+*.tmp
+*.temp
+*_temp.py
+*_backup.py
+
+# Logs de debug et correction
+debug_*.log
+correction_*.log
+validation_*.log
+
+# Sauvegardes de scripts
+main.py.backup.*
+gui.py.backup.*
+config_manager.py.backup.*
+
+# Environnements et build (complements)
+.venv/
+.env/
+build/
+dist/
+*.egg-info/
+
+# IDE et editeurs
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*.swo
+*~
+
+# ========================================
+# PHASE 3 - Fichiers temporaires et debug
+# ========================================
+
+# Scripts de debug Phase 3
+debug/diagnostic_phase*.json
+debug/corrections_phase*.json
+debug/validation_phase*.json
+debug/*.backup.phase*
+
+# Arborescences et rapports generes
+ARBORESCENCE_FINALE.txt
+arborescence_console.txt
+arborescence_finale.txt
+
+# Fichiers temporaires de developpement
+*.tmp
+*.temp
+*_temp.py
+*_backup.py
+
+# Logs de debug et correction
+debug_*.log
+correction_*.log
+validation_*.log
+
+# Sauvegardes de scripts
+main.py.backup.*
+gui.py.backup.*
+config_manager.py.backup.*
+
+# Environnements et build (complements)
+.venv/
+.env/
+build/
+dist/
+*.egg-info/
+
+# IDE et editeurs
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*.swo
+*~
+
+# ========================================
+# PHASE 3 - Fichiers temporaires et debug
+# ========================================
+
+# Scripts de debug Phase 3
+debug/diagnostic_phase*.json
+debug/corrections_phase*.json
+debug/validation_phase*.json
+debug/*.backup.phase*
+
+# Arborescences et rapports generes
+ARBORESCENCE_FINALE.txt
+arborescence_console.txt
+arborescence_finale.txt
+
+# Fichiers temporaires de developpement
+*.tmp
+*.temp
+*_temp.py
+*_backup.py
+
+# Logs de debug et correction
+debug_*.log
+correction_*.log
+validation_*.log
+
+# Sauvegardes de scripts
+main.py.backup.*
+gui.py.backup.*
+config_manager.py.backup.*
+
+# Environnements et build (complements)
+.venv/
+.env/
+build/
+dist/
+*.egg-info/
+
+# IDE et editeurs
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*.swo
+*~

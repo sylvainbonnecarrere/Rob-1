@@ -1,4 +1,21 @@
-curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY" \
+curl "https://generativelanguage.googleapis.com/v1beta/models/{{LLM_MODEL}}:generateContent" \
+  -H "x-goog-api-key: {{API_KEY}}" \
   -H 'Content-Type: application/json' \
-  -X POST \
-  -d '{"contents": [{"parts": [{"text": "Explain how AI works"}]}]}'
+  -d '{
+    "system_instruction": {
+      "parts": [
+        {
+          "text": "{{SYSTEM_PROMPT_ROLE}} {{SYSTEM_PROMPT_BEHAVIOR}}"
+        }
+      ]
+    },
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "{{USER_PROMPT}}"
+          }
+        ]
+      }
+    ]
+  }'

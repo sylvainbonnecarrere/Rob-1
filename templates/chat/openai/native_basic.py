@@ -1,21 +1,10 @@
-# Template natif OpenAI Chat - A implémenter
-# Ce template sera utilisé quand la méthode "native" sera sélectionnée
+from openai import OpenAI
 
-"""
-Template pour utilisation du SDK OpenAI natif
-Modèle configuré: gpt-4o-mini (modifiable dans Setup API)
+client = OpenAI()
 
-Structure attendue:
-- Import openai
-- Configuration client avec API key
-- Appel chat.completions.create()
-- Gestion réponse unifiée
+response = client.responses.create(
+  model="gpt-4.1",
+  input="Tell me a three sentence bedtime story about a unicorn."
+)
 
-A développer avec le code natif fourni ultérieurement.
-"""
-
-# Configuration disponible:
-# - model: Variable selon sélection utilisateur
-# - messages: Format standard OpenAI
-# - temperature, max_tokens: Paramètres configurables
-# - API key: Automatiquement injectée
+print(response)

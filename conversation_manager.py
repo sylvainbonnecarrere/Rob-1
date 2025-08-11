@@ -203,18 +203,28 @@ class ConversationManager:
         for original, replacement in replacements.items():
             cleaned_text = cleaned_text.replace(original, replacement)
         
-        # Normaliser les caractères unicode restants
+        # ÉTAPE 1 : Nettoyer les caractères de contrôle AVANT normalisation
+        cleaned_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', ' ', cleaned_text)
+        
+        # ÉTAPE 2 : Normaliser les caractères unicode restants
         try:
             cleaned_text = unicodedata.normalize('NFKD', cleaned_text)
             cleaned_text = ''.join(c for c in cleaned_text if ord(c) < 128)
         except Exception as e:
             self.logger.warning(f"Erreur normalisation unicode: {e}")
         
-        # Nettoyer les caractères de contrôle dangereux pour curl
-        cleaned_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', ' ', cleaned_text)
-        
-        # Remplacer les guillemets doubles par des simples pour éviter les problèmes JSON
-        cleaned_text = cleaned_text.replace('"', "'")
+        # ÉTAPE 3 : ÉCHAPPEMENT JSON pour injection dans template
+        # 1. Échapper les antislashes d'abord (pour éviter la double échappement)
+        cleaned_text = cleaned_text.replace('\\', '\\\\')
+        # 2. Échapper les guillemets doubles pour JSON
+        cleaned_text = cleaned_text.replace('"', '\\"')
+        # 3. Échapper les caractères de nouvelle ligne spécifiquement pour JSON
+        cleaned_text = cleaned_text.replace('\n', '\\n')
+        cleaned_text = cleaned_text.replace('\r', '\\r')
+        # 4. Échapper les tabulations
+        cleaned_text = cleaned_text.replace('\t', '\\t')
+        # 5. Sécurité supplémentaire : échapper les caractères de contrôle restants
+        cleaned_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', cleaned_text)
         
         # Nettoyer les espaces multiples
         cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
@@ -595,6 +605,73 @@ RÉSUMÉ CONTEXTUEL :"""
             status_parts.append("⚡RÉSUMÉ")
         
         return f"{indicator} {' | '.join(status_parts)}"
+
+    def escape_for_json_template(self, text: str) -> str:
+        """
+        Échappe un texte spécifiquement pour injection dans un template JSON curl
+        Cette fonction doit être appelée APRÈS concaténation de l'historique
+        
+        Args:
+            text: Texte à échapper pour JSON
+            
+        Returns:
+            Texte échappé pour injection JSON sécurisée
+        """
+        if not text:
+            return ""
+        
+        # ÉCHAPPEMENT JSON COMPLET - VERSION CORRIGÉE
+        escaped = text
+        
+        # 1. Échapper les antislashes d'abord
+        escaped = escaped.replace('\\', '\\\\')
+        
+        # 2. Échapper les guillemets doubles
+        escaped = escaped.replace('"', '\\"')
+        
+        # 3. CORRECTION: Remplacer les \\n LITTÉRAUX par de vrais \n pour JSON
+        # Cela permettra à json.loads() de les parser correctement
+        escaped = escaped.replace('\\\\n', '\\n')  # \\n littéral devient \n pour JSON
+        
+        # 4. Échapper les tabulations
+        escaped = escaped.replace('\t', '\\t')
+        
+        # 5. Supprimer/échapper les caractères de contrôle restants
+        escaped = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', escaped)
+        
+        return escaped
+
+    def validate_json_for_template(self, text_content: str) -> tuple[bool, str]:
+        """
+        Valide que le texte peut être injecté dans un template JSON sans erreur
+        
+        Args:
+            text_content: Texte à valider pour injection JSON
+            
+        Returns:
+            tuple: (is_valid, error_message)
+        """
+        try:
+            # Test de construction JSON simple (comme dans le template Gemini)
+            test_payload = f'{{"contents":[{{"parts":[{{"text":"{text_content}"}}]}}]}}'
+            
+            # Tentative de parsing pour validation
+            json.loads(test_payload)
+            
+            self.logger.debug(f"Validation JSON réussie pour {len(text_content)} caractères")
+            return True, ""
+            
+        except json.JSONDecodeError as e:
+            error_msg = f"Erreur JSON: {str(e)}"
+            self.logger.error(f"Validation JSON échouée: {error_msg}")
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Erreur validation: {str(e)}"
+            self.logger.error(f"Erreur validation JSON: {error_msg}")
+            return False, error_msg
+
+
+# Fonction simulée pour les tests (à remplacer par l'intégration réelle)
     
     def reset_conversation(self) -> None:
         """

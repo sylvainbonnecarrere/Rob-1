@@ -1,0 +1,21 @@
+curl -X POST https://api.anthropic.com/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 20000,
+  "temperature": 1,
+  "system": "Agent spécialisé en code moderne",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What is the best French Cheese?"
+        }
+      ]
+    }
+  ]
+}'

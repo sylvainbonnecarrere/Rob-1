@@ -1,0 +1,18 @@
+curl https://api.x.ai/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer $XAI_API_KEY" \
+-m 3600 \
+-d '{
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are Grok, a highly intelligent, helpful AI assistant."
+        },
+        {
+            "role": "user",
+            "content": "What is the best French Cheese?"
+        }
+    ],
+    "model": "grok-4",
+    "stream": false
+}'

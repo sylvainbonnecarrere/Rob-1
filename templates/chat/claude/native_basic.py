@@ -1,21 +1,25 @@
-# Template natif Claude Chat - A implémenter
-# Ce template sera utilisé quand la méthode "native" sera sélectionnée
+import anthropic
 
-"""
-Template pour utilisation du SDK Anthropic natif
-Modèle configuré: claude-3-sonnet-20240229 (modifiable dans Setup API)
+client = anthropic.Anthropic(
+    # defaults to os.environ.get("ANTHROPIC_API_KEY")
+    api_key="my_api_key",
+)
 
-Structure attendue:
-- Import anthropic
-- Configuration client avec API key
-- Appel messages.create()
-- Gestion réponse unifiée
-
-A développer avec le code natif fourni ultérieurement.
-"""
-
-# Configuration disponible:
-# - model: Variable selon sélection utilisateur
-# - messages: Format standard Anthropic
-# - max_tokens: Paramètre configurable
-# - API key: Automatiquement injectée
+message = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=20000,
+    temperature=1,
+    system="Agent spécialisé en code moderne",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "What is the best French Cheese?"
+                }
+            ]
+        }
+    ]
+)
+print(message.content)
