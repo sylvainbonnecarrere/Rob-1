@@ -39,6 +39,9 @@ dist/
 # Logs
 *.log
 
+# Fichiers temporaires API
+conversation_api/*/temp/
+
 # Virtual environments
 venv/
 .env/
@@ -48,7 +51,6 @@ venv/
 Thumbs.db
 
 # SÉCURITÉ CRITIQUE - Fichiers contenant des clés API et données sensibles
-profiles/
 .env
 .env.local
 .env.development

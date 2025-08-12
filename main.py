@@ -76,21 +76,9 @@ def verifier_installation_curl():
         return False
 
 def execute_curl():
-    curl_command = [
-        "curl",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyAI56WaXrkK1iFHNxp3_akHMFTN5-kabBk",
-        "-H", "Content-Type: application/json",
-        "-X", "POST",
-        "-d", '{"contents": [{"parts":[{"text": "En tant qu\'expert vendeur. Ton comportement est défini ainsi : excité. J\'aimerais te poser la question suivante : "}]}]}'
-    ]
-
-    try:
-        result = subprocess.run(curl_command, capture_output=True, text=True, check=True)
-        print("Réponse de l'API :")
-        print(result.stdout)
-    except subprocess.CalledProcessError as e:
-        print("Erreur lors de l'exécution de la requête CURL :")
-        print(e.stderr)
+    # Fonction de test obsolète - remplacée par le système APIManager/PayloadManager
+    print("⚠️ Fonction obsolète - Utilisez le système APIManager via l'interface GUI")
+    return False
 
 def check_and_create_launcher():
     """

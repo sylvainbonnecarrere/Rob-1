@@ -638,29 +638,32 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                         try:
                             reponse_json = json.loads(resultat.stdout)
                             
-                            # Utiliser le nouveau système de parsing avec provider spécifique
+                            # PHASE 2: Utiliser le nouveau système response_parser générique pour le résumé
                             try:
-                                from api_response_parser import get_response_parser
-                                parser = get_response_parser()
+                                from response_parser import parse_response
                                 
-                                # PHASE 3: Récupérer le provider correctement depuis template_id
-                                template_id = profil.get('template_id', '')
-                                if template_id and '_' in template_id:
-                                    provider = template_id.split('_')[0].lower()
-                                else:
-                                    provider = profil.get('name', '').lower()
+                                # Lire le response_path depuis le profil
+                                response_path = profil.get('response_path', [])
+                                provider = profil.get('name', 'unknown')
                                 
-                                success, texte, api_type = parser.parse_response(reponse_json, provider)
+                                print(f"[DEBUG] Résumé Phase 2 avec provider: {provider}")
+                                print(f"[DEBUG] Résumé response path: {response_path}")
                                 
-                                if not success and provider != 'auto':
-                                    # Fallback vers auto seulement si le provider spécifique échoue
-                                    success, texte, api_type = parser.parse_response(reponse_json, 'auto')
+                                # Extraction générique avec le nouveau parser
+                                texte_reponse = parse_response(reponse_json, response_path)
                                 
-                                return texte if success else f"Erreur parsing {provider}: {texte}"
+                                if not texte_reponse:
+                                    return f"❌ Erreur parsing résumé {provider} avec path {response_path}"
+                                    
+                                print(f"✅ Résumé Phase 2 extrait: {len(texte_reponse)} chars")
+                                return texte_reponse
+                                
                             except ImportError:
-                                # Fallback ancien système
+                                # Fallback ancien système hardcodé (Gemini seulement)
+                                print("[DEBUG] Résumé fallback vers ancien parsing Gemini")
                                 return reponse_json["candidates"][0]["content"]["parts"][0]["text"]
-                        except:
+                        except Exception as e:
+                            print(f"[DEBUG] Erreur parsing résumé: {e}")
                             return "Erreur lors du résumé"
                     return "Erreur API lors du résumé"
                 
@@ -760,31 +763,33 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
             try:
                 reponse_json = json.loads(resultat.stdout)
                 
-                # Utiliser le nouveau système de parsing évolutif avec provider spécifique
+                # PHASE 2: Utiliser le nouveau système response_parser générique
                 try:
-                    from api_response_parser import get_response_parser
-                    parser = get_response_parser()
+                    from response_parser import parse_response
                     
-                    # PHASE 2: Utiliser le provider spécifique du profil
-                    provider = profil.get('name', '').lower()
-                    success, texte_reponse, api_detectee = parser.parse_response(reponse_json, provider)
+                    # Lire le response_path depuis le profil
+                    response_path = profil.get('response_path', [])
+                    provider = profil.get('name', 'unknown')
                     
-                    if not success and provider != 'auto':
-                        # Fallback vers auto seulement si le provider spécifique échoue
-                        print(f"[DEBUG] Parsing {provider} échoué, essai avec auto...")
-                        success, texte_reponse, api_detectee = parser.parse_response(reponse_json, 'auto')
+                    print(f"[DEBUG] Parsing Phase 2 avec provider: {provider}")
+                    print(f"[DEBUG] Response path: {response_path}")
                     
-                    print(f"[DEBUG] Parsing réussi avec provider: {api_detectee}")
+                    # Extraction générique avec le nouveau parser
+                    texte_reponse = parse_response(reponse_json, response_path)
                     
-                    if not success:
-                        # Si le parsing échoue, afficher l'erreur
-                        champ_r.insert('1.0', f"Erreur parsing API ({api_detectee}): {texte_reponse}")
+                    if not texte_reponse:
+                        # Si le parsing échoue, afficher l'erreur avec structure debug
+                        from response_parser import debug_json_structure
+                        structure = debug_json_structure(reponse_json, max_depth=2)
+                        champ_r.insert('1.0', f"❌ Erreur parsing {provider} avec path {response_path}\\n"
+                                           f"Structure JSON: {structure}\\n")
                         return
                         
-                    print(f"🎯 API détectée dans soumettreQuestionAPI: {api_detectee}")
+                    print(f"✅ Parsing Phase 2 réussi avec {provider}: {len(texte_reponse)} chars")
                     
                 except ImportError:
-                    # Fallback vers l'ancien système (Gemini seulement)
+                    # Fallback vers l'ancien système hardcodé (Gemini seulement)
+                    print("[DEBUG] Fallback vers ancien parsing Gemini")
                     texte_reponse = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
                 
                 # 7. Ajouter la réponse au ConversationManager

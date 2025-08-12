@@ -254,6 +254,22 @@ class ConversationManager:
         
         return escaped
     
+    def _clean_text_for_api(self, text: str) -> str:
+        """
+        Nettoie le texte pour l'envoi à l'API en réutilisant la logique d'échappement
+        
+        Args:
+            text: Texte à nettoyer
+            
+        Returns:
+            str: Texte nettoyé et échappé pour l'API
+        """
+        if not text:
+            return ""
+        
+        # Utiliser la logique d'échappement existante
+        return self.escape_for_json(text)
+    
     def add_message(self, role: str, content: str) -> None:
         """
         Ajoute un nouveau message à l'historique avec échappement JSON automatique.
@@ -376,12 +392,24 @@ class ConversationManager:
     
     def _load_summary_template(self) -> str:
         """
-        Charge le template de résumé depuis le ConfigManager
+        Charge le template de résumé depuis l'APIManager
         """
-        if self.config_manager:
-            template = self.config_manager.load_conversation_template(self.template_id)
-            if template:
-                return template
+        try:
+            # Utiliser l'APIManager pour charger le template
+            from core.api_manager import APIManager
+            api_manager = APIManager()
+            
+            # Charger le template spécifié dans le profil
+            template_content = api_manager.load_template(self.template_id)
+            
+            if template_content:
+                self.logger.info(f"Template de résumé chargé: {self.template_id}")
+                return template_content
+            else:
+                self.logger.warning(f"Template '{self.template_id}' non trouvé, utilisation du template par défaut")
+                
+        except Exception as e:
+            self.logger.error(f"Erreur chargement template '{self.template_id}': {e}")
         
         # Template par défaut si aucun n'est trouvé
         return """Veuillez analyser la conversation suivante et créer un résumé concis qui préserve les informations essentielles.
