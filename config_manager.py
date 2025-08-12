@@ -418,6 +418,21 @@ class ConfigManager:
                         with open(template_path, 'r', encoding='utf-8') as f:
                             template_data = json.load(f)
                         
+                        # Ajouter la section conversation_management si elle n'existe pas
+                        if "conversation_management" not in template_data:
+                            template_data["conversation_management"] = {
+                                "words_enabled": True,
+                                "sentences_enabled": True,
+                                "tokens_enabled": False,
+                                "word_threshold": 300,
+                                "sentence_threshold": 15,
+                                "token_threshold": 1000,
+                                "summary_template": f"Template {template_name}",
+                                "custom_instructions": "Résume la conversation précédente en conservant les points clés et le contexte important.",
+                                "auto_save": True
+                            }
+                            self.logger.info(f"✅ Section conversation_management ajoutée au profil {template_name}")
+                        
                         # Sauvegarder comme profil (les clés API restent vides)
                         success = self.save_profile(template_name, template_data) and success
                         self.logger.info(f"✅ Profil {template_name} créé à partir du template sécurisé")
@@ -429,7 +444,34 @@ class ConfigManager:
                     self.logger.error(f"❌ Erreur création profil {template_name} : {e}")
                     success = False
             else:
-                self.logger.debug(f"Profil {template_name} existe déjà")
+                # Le profil existe déjà, vérifier s'il a conversation_management
+                try:
+                    with open(profile_path, 'r', encoding='utf-8') as f:
+                        existing_data = json.load(f)
+                    
+                    if "conversation_management" not in existing_data:
+                        # Ajouter la section conversation_management
+                        existing_data["conversation_management"] = {
+                            "words_enabled": True,
+                            "sentences_enabled": True,
+                            "tokens_enabled": False,
+                            "word_threshold": 300,
+                            "sentence_threshold": 15,
+                            "token_threshold": 1000,
+                            "summary_template": f"Template {template_name}",
+                            "custom_instructions": "Résume la conversation précédente en conservant les points clés et le contexte important.",
+                            "auto_save": True
+                        }
+                        
+                        # Sauvegarder le profil mis à jour
+                        success = self.save_profile(template_name, existing_data) and success
+                        self.logger.info(f"✅ Section conversation_management ajoutée au profil existant {template_name}")
+                    else:
+                        self.logger.debug(f"Profil {template_name} a déjà conversation_management")
+                        
+                except Exception as e:
+                    self.logger.error(f"❌ Erreur mise à jour profil {template_name} : {e}")
+                    success = False
         
         return success
 

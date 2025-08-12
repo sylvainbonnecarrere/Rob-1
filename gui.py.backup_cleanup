@@ -2276,13 +2276,13 @@ def open_setup_history_menu():
                 # Instructions pour cette API spécifique
                 api_name = selected_template.replace("Template ", "")
                 
-                # Charger les instructions personnalisées depuis le profil principal
+                # Essayer de charger les instructions personnalisées depuis le backup
+                backup_profile_path = os.path.join("profiles_backup_conversation", f"{api_name}.json")
                 default_instructions = f"Résume la conversation en utilisant le style et les préférences configurées pour {api_name}. Adapte le résumé au contexte et aux besoins spécifiques de cette API."
                 
-                main_profile_path = os.path.join("profiles", f"{api_name}.json")
-                if os.path.exists(main_profile_path):
+                if os.path.exists(backup_profile_path):
                     try:
-                        with open(main_profile_path, 'r', encoding='utf-8') as f:
+                        with open(backup_profile_path, 'r', encoding='utf-8') as f:
                             template_profile = json.load(f)
                         
                         template_conv_mgmt = template_profile.get("conversation_management", {})
@@ -2529,7 +2529,75 @@ def creer_interface():
     root = tk.Tk()
     root.title("ROB-1")
 
-    # Note: L'initialisation des profils est maintenant gérée par ConfigManager
+    # === INITIALISATION DES PROFILS D'HISTORIQUE AU DÉMARRAGE ===
+    def initialiser_profils_historique():
+        """Crée les profils d'historique par défaut au démarrage"""
+        try:
+            backup_dir = "profiles_backup_conversation"
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # 1. Créer le profil d'historique par défaut s'il n'existe pas
+            default_profile_path = os.path.join(backup_dir, "default.json")
+            if not os.path.exists(default_profile_path):
+                default_profile = {
+                    "name": "default",
+                    "api_key": "",
+                    "history": True,
+                    "conversation_management": {
+                        "words_enabled": True,
+                        "sentences_enabled": True,
+                        "tokens_enabled": False,
+                        "word_threshold": 500,
+                        "sentence_threshold": 25,
+                        "token_threshold": 1000,
+                        "summary_template": "Template Gemini",  # Utiliser un template spécifique par défaut
+                        "custom_instructions": "Résume la conversation précédente en conservant les points clés et le contexte important. Garde un ton professionnel et structure ton résumé de manière claire.",
+                        "auto_save": True
+                    }
+                }
+                
+                with open(default_profile_path, 'w', encoding='utf-8') as f:
+                    json.dump(default_profile, f, indent=2, ensure_ascii=False)
+                print(f"✅ Profil d'historique par défaut créé: {default_profile_path}")
+            
+            # 2. Créer les profils d'historique pour toutes les APIs configurées
+            try:
+                api_profiles = api_manager.list_available_profiles()
+                for api_name in api_profiles:
+                    api_profile_path = os.path.join(backup_dir, f"{api_name}.json")
+                    
+                    if not os.path.exists(api_profile_path):
+                        # Charger le profil API principal
+                        api_data = api_manager.load_profile(api_name)
+                        if api_data:
+                            # Créer le profil d'historique basé sur l'API
+                            history_profile = api_data.copy()
+                            
+                            # Ajouter/mettre à jour la section conversation_management
+                            history_profile["conversation_management"] = {
+                                "words_enabled": True,
+                                "sentences_enabled": True,
+                                "tokens_enabled": False,
+                                "word_threshold": 500,
+                                "sentence_threshold": 25,
+                                "token_threshold": 1000,
+                                "summary_template": f"Template {api_name}",
+                                "custom_instructions": f"Résume la conversation en utilisant le style et les préférences configurées pour {api_name}. Adapte le résumé au contexte et aux besoins spécifiques de cette API.",
+                                "auto_save": True
+                            }
+                            
+                            with open(api_profile_path, 'w', encoding='utf-8') as f:
+                                json.dump(history_profile, f, indent=2, ensure_ascii=False)
+                            print(f"✅ Profil d'historique créé pour {api_name}")
+            
+            except Exception as e:
+                print(f"⚠️  Erreur création profils API: {e}")
+                
+        except Exception as e:
+            print(f"❌ Erreur initialisation profils historique: {e}")
+    
+    # Initialiser les profils d'historique au démarrage
+    initialiser_profils_historique()
 
     # Gestion propre de la fermeture
     def on_closing():

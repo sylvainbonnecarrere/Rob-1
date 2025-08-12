@@ -91,15 +91,36 @@ class ConversationManager:
             self.tokens_enabled = thresholds.get("tokens", {}).get("enabled", False)
         else:
             # Fallback vers ancienne structure ou valeurs par défaut
-            old_threshold = self._get_config_value("summary_threshold", self.default_config["summary_threshold"])
-            self.words_threshold = old_threshold.get("words", self.default_config["summary_threshold"]["words"])
-            self.sentences_threshold = old_threshold.get("sentences", self.default_config["summary_threshold"]["sentences"])
-            self.tokens_threshold = 1200
+            # CORRECTION: Gérer les formats de configuration multiples
             
-            # Par défaut, mots et phrases activés
-            self.words_enabled = True
-            self.sentences_enabled = True
-            self.tokens_enabled = False
+            # 1. Vérifier directement dans le profil s'il y a summary_threshold
+            old_threshold = self.config.get("summary_threshold", None) if self.config else None
+            
+            # 2. Si pas trouvé, essayer les clés individuelles du fichier JSON
+            if old_threshold is None:
+                words_val = self._get_config_value("word_threshold", self.default_config["summary_threshold"]["words"])
+                sentences_val = self._get_config_value("sentence_threshold", self.default_config["summary_threshold"]["sentences"])
+                tokens_val = self._get_config_value("token_threshold", 1200)
+                
+                self.words_threshold = words_val
+                self.sentences_threshold = sentences_val
+                self.tokens_threshold = tokens_val
+                
+                # Utiliser les clés enabled si disponibles, sinon valeurs par défaut
+                self.words_enabled = self._get_config_value("words_enabled", True)
+                self.sentences_enabled = self._get_config_value("sentences_enabled", True)
+                self.tokens_enabled = self._get_config_value("tokens_enabled", False)
+                
+            else:
+                # 3. Utiliser l'ancienne structure si trouvée
+                self.words_threshold = old_threshold.get("words", self.default_config["summary_threshold"]["words"])
+                self.sentences_threshold = old_threshold.get("sentences", self.default_config["summary_threshold"]["sentences"])
+                self.tokens_threshold = 1200
+                
+                # Par défaut, mots et phrases activés
+                self.words_enabled = True
+                self.sentences_enabled = True
+                self.tokens_enabled = False
         
         self.show_indicators = self._get_config_value("show_indicators", self.default_config["show_indicators"])
         self.template_id = self._get_config_value("summary_template_id", self.default_config["summary_template_id"])
@@ -172,15 +193,41 @@ class ConversationManager:
             self.logger.warning(f"Erreur comptage tokens: {e}")
             return 0
     
-    def _clean_text_for_api(self, text: str) -> str:
+    def escape_for_json(self, text: str) -> str:
         """
-        Nettoie le texte pour éviter les problèmes d'échappement dans les commandes curl
-        Remplace les caractères problématiques par des équivalents sûrs
+        Échappe un texte de manière définitive pour injection JSON sécurisée.
+        Cette fonction doit être appelée lors de l'enregistrement dans l'historique,
+        pas au moment de la requête.
+        
+        Args:
+            text: Texte à échapper pour JSON
+            
+        Returns:
+            Texte complètement échappé et sécurisé pour JSON
         """
         if not text:
             return ""
         
-        # Dictionnaire de remplacement pour les caractères français problématiques
+        # ÉTAPE 1 : Échappement JSON obligatoire (ordre important !)
+        escaped = text
+        
+        # 1. Échapper les antislashes AVANT tout le reste (pour éviter double échappement)
+        escaped = escaped.replace('\\', '\\\\')
+        
+        # 2. Échapper les guillemets doubles pour JSON
+        escaped = escaped.replace('"', '\\"')
+        
+        # 3. Échapper les caractères de nouvelle ligne pour JSON
+        escaped = escaped.replace('\n', '\\n')
+        escaped = escaped.replace('\r', '\\r')
+        
+        # 4. Échapper les tabulations
+        escaped = escaped.replace('\t', '\\t')
+        
+        # 5. Échapper les caractères de contrôle problématiques
+        escaped = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', escaped)
+        
+        # ÉTAPE 2 : Normalisation des caractères accentués (optionnel, après échappement)
         replacements = {
             'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
             'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
@@ -198,67 +245,44 @@ class ConversationManager:
             'Ç': 'C', 'Ñ': 'N'
         }
         
-        # Appliquer les remplacements
-        cleaned_text = text
+        # Appliquer les remplacements d'accents (optionnel)
         for original, replacement in replacements.items():
-            cleaned_text = cleaned_text.replace(original, replacement)
+            escaped = escaped.replace(original, replacement)
         
-        # ÉTAPE 1 : Nettoyer les caractères de contrôle AVANT normalisation
-        cleaned_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', ' ', cleaned_text)
+        # ÉTAPE 3 : Nettoyage final - supprimer espaces multiples
+        escaped = re.sub(r'\s+', ' ', escaped).strip()
         
-        # ÉTAPE 2 : Normaliser les caractères unicode restants
-        try:
-            cleaned_text = unicodedata.normalize('NFKD', cleaned_text)
-            cleaned_text = ''.join(c for c in cleaned_text if ord(c) < 128)
-        except Exception as e:
-            self.logger.warning(f"Erreur normalisation unicode: {e}")
-        
-        # ÉTAPE 3 : ÉCHAPPEMENT JSON pour injection dans template
-        # 1. Échapper les antislashes d'abord (pour éviter la double échappement)
-        cleaned_text = cleaned_text.replace('\\', '\\\\')
-        # 2. Échapper les guillemets doubles pour JSON
-        cleaned_text = cleaned_text.replace('"', '\\"')
-        # 3. Échapper les caractères de nouvelle ligne spécifiquement pour JSON
-        cleaned_text = cleaned_text.replace('\n', '\\n')
-        cleaned_text = cleaned_text.replace('\r', '\\r')
-        # 4. Échapper les tabulations
-        cleaned_text = cleaned_text.replace('\t', '\\t')
-        # 5. Sécurité supplémentaire : échapper les caractères de contrôle restants
-        cleaned_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', cleaned_text)
-        
-        # Nettoyer les espaces multiples
-        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
-        
-        return cleaned_text
+        return escaped
     
     def add_message(self, role: str, content: str) -> None:
         """
-        Ajoute un nouveau message à l'historique
+        Ajoute un nouveau message à l'historique avec échappement JSON automatique.
         
         Args:
             role: 'user' ou 'model'
-            content: Contenu du message
+            content: Contenu du message (sera automatiquement échappé)
         """
         if role not in ['user', 'model']:
             raise ValueError("Le rôle doit être 'user' ou 'model'")
         
-        # Nettoyer le contenu pour éviter les problèmes d'échappement
-        cleaned_content = self._clean_text_for_api(content.strip())
+        # ÉTAPE 2 : Échapper le contenu dès l'enregistrement
+        escaped_content = self.escape_for_json(content.strip())
         
         message = {
             'role': role,
-            'content': cleaned_content,
+            'content': escaped_content,
             'timestamp': datetime.now().isoformat(),
-            'word_count': len(cleaned_content.split()),
-            'sentence_count': len(re.split(r'[.!?]+', cleaned_content.strip()))
+            'word_count': len(escaped_content.split()),
+            'sentence_count': len(re.split(r'[.!?]+', escaped_content.strip()))
         }
         
         self.conversation_history.append(message)
         self.logger.debug(f"Message ajouté: {role} - {message['word_count']} mots, {message['sentence_count']} phrases")
         
         # Log d'avertissement si le contenu original contenait des caractères problématiques
-        if content.strip() != cleaned_content:
-            self.logger.info("Contenu nettoyé pour éviter les problèmes d'échappement")
+        original_clean = content.strip()
+        if original_clean != escaped_content:
+            self.logger.info("Contenu nettoyé pour éviter les problèmes d'échappement JSON")
     
     def get_current_history_word_count(self) -> int:
         """
@@ -606,73 +630,6 @@ RÉSUMÉ CONTEXTUEL :"""
         
         return f"{indicator} {' | '.join(status_parts)}"
 
-    def escape_for_json_template(self, text: str) -> str:
-        """
-        Échappe un texte spécifiquement pour injection dans un template JSON curl
-        Cette fonction doit être appelée APRÈS concaténation de l'historique
-        
-        Args:
-            text: Texte à échapper pour JSON
-            
-        Returns:
-            Texte échappé pour injection JSON sécurisée
-        """
-        if not text:
-            return ""
-        
-        # ÉCHAPPEMENT JSON COMPLET - VERSION CORRIGÉE
-        escaped = text
-        
-        # 1. Échapper les antislashes d'abord
-        escaped = escaped.replace('\\', '\\\\')
-        
-        # 2. Échapper les guillemets doubles
-        escaped = escaped.replace('"', '\\"')
-        
-        # 3. CORRECTION: Remplacer les \\n LITTÉRAUX par de vrais \n pour JSON
-        # Cela permettra à json.loads() de les parser correctement
-        escaped = escaped.replace('\\\\n', '\\n')  # \\n littéral devient \n pour JSON
-        
-        # 4. Échapper les tabulations
-        escaped = escaped.replace('\t', '\\t')
-        
-        # 5. Supprimer/échapper les caractères de contrôle restants
-        escaped = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', escaped)
-        
-        return escaped
-
-    def validate_json_for_template(self, text_content: str) -> tuple[bool, str]:
-        """
-        Valide que le texte peut être injecté dans un template JSON sans erreur
-        
-        Args:
-            text_content: Texte à valider pour injection JSON
-            
-        Returns:
-            tuple: (is_valid, error_message)
-        """
-        try:
-            # Test de construction JSON simple (comme dans le template Gemini)
-            test_payload = f'{{"contents":[{{"parts":[{{"text":"{text_content}"}}]}}]}}'
-            
-            # Tentative de parsing pour validation
-            json.loads(test_payload)
-            
-            self.logger.debug(f"Validation JSON réussie pour {len(text_content)} caractères")
-            return True, ""
-            
-        except json.JSONDecodeError as e:
-            error_msg = f"Erreur JSON: {str(e)}"
-            self.logger.error(f"Validation JSON échouée: {error_msg}")
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"Erreur validation: {str(e)}"
-            self.logger.error(f"Erreur validation JSON: {error_msg}")
-            return False, error_msg
-
-
-# Fonction simulée pour les tests (à remplacer par l'intégration réelle)
-    
     def reset_conversation(self) -> None:
         """
         Remet à zéro la conversation (nouveau chat)
