@@ -1,0 +1,13 @@
+curl --location "https://api.mistral.ai/v1/chat/completions" \
+     --header 'Content-Type: application/json' \
+     --header 'Accept: application/json' \
+     --header "Authorization: Bearer {{API_KEY}}" \
+     --data '{
+    "model": "{{LLM_MODEL}}",
+    "messages": [
+     {
+        "role": "user",
+        "content": "{{USER_PROMPT}}"
+      }
+    ]
+  }'

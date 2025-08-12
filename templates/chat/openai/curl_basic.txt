@@ -1,0 +1,9 @@
+curl "https://api.openai.com/v1/responses" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $OPENAI_API_KEY" \
+    -d '{
+        "model": "{{LLM_MODEL}}",
+        "reasoning": {"effort": "low"},
+        "instructions": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}",
+        "input": "{{USER_PROMPT}}"
+    }'

@@ -5,7 +5,7 @@ curl "https://generativelanguage.googleapis.com/v1beta/models/{{LLM_MODEL}}:gene
     "system_instruction": {
       "parts": [
         {
-          "text": "{{SYSTEM_PROMPT_ROLE}} {{SYSTEM_PROMPT_BEHAVIOR}}"
+          "text": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}"
         }
       ]
     },

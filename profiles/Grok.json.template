@@ -1,0 +1,33 @@
+{
+  "profil": "Grok",
+  "nom": "Grok",
+  "api_key": "YOUR_GEMINI_API_KEY_HERE",
+  "replace_apikey": "$XAI_API_KEY",
+  "template_id": "grok_chat",
+  "default": false,
+  "history": false,
+  "role": "",
+  "behavior": "",
+  "conversation": {
+    "enabled": true,
+    "max_context_length": 4000,
+    "summary_enabled": true,
+    "summary_trigger_length": 8000,
+    "summary_target_length": 2000,
+    "summary_template_id": "grok_summary",
+    "conversation_file": "conversations/conversation.txt"
+  },
+  "file_generation": {
+    "enabled": false,
+    "mode": "simple",
+    "simple_config": {
+      "include_question": true,
+      "include_response": true,
+      "base_filename": "conversation",
+      "same_file": true
+    },
+    "dev_config": {
+      "extension": ".py"
+    }
+  }
+}

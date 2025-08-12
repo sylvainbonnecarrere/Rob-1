@@ -1,0 +1,18 @@
+curl https://api.x.ai/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer {{API_KEY}}" \
+-m 3600 \
+-d '{
+    "messages": [
+        {
+            "role": "system",
+            "content": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}"
+        },
+        {
+            "role": "user",
+            "content": "{{USER_PROMPT}}"
+        }
+    ],
+    "model": "grok-4",
+    "stream": false
+}'
