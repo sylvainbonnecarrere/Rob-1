@@ -16,6 +16,7 @@ from config_manager import ConfigManager
 from core.api_manager import ProfileManagerFactory
 from conversation_manager import ConversationManager
 from system_profile_generator import generate_system_profile_at_startup
+from payload_manager import PayloadManager, extract_json_from_curl
 
 # Configure logging to log initialization events
 logging.basicConfig(
@@ -308,16 +309,14 @@ def selectionProfilDefaut():
 
 def preparer_requete_curl(final_prompt):
     """
-    Prépare une commande curl robuste et multiplateforme.
-    VERSION CORRIGÉE: Gère les templates multi-lignes OpenAI/Gemini/Claude
+    Phase 1 - Nouvelle implémentation avec fichier JSON temporaire
+    Prépare une commande curl sécurisée en utilisant un fichier payload externe
     """
-    import json
-    import re
-    import platform
+    print(f"[DEBUG] === PHASE 1 - CURL SÉCURISÉ VIA FICHIER JSON ===")
     
-    # PHASE 3: Utiliser le nouveau système APIManager avec placeholders
-    template_id = profilAPIActuel.get('template_id', '')
+    # Récupérer le profil API actuel
     provider = profilAPIActuel.get('name', '').lower()
+    template_id = profilAPIActuel.get('template_id', '')
     template_type = profilAPIActuel.get('template_type', 'chat')
     
     # Construire l'ID du template selon la structure V2
@@ -326,143 +325,60 @@ def preparer_requete_curl(final_prompt):
     
     print(f"[DEBUG] Provider: {provider}")
     print(f"[DEBUG] Template ID: {template_id}")
-    print(f"[DEBUG] Template type: {template_type}")
     print(f"[DEBUG] Final prompt: {final_prompt[:100]}...")
     
-    # Détection OS (toujours nécessaire pour la suite)
-    os_type = platform.system().lower()
-    is_windows = os_type == 'windows'
-    
-    # NOUVEAU: Utiliser get_processed_template avec remplacement des placeholders
-    curl_exe = api_manager.get_processed_template(template_id, profilAPIActuel, final_prompt)
-    
-    if not curl_exe:
-        print(f"[ERROR] Aucun template trouvé pour {template_id}")
-        # Fallback vers l'ancien système si nécessaire
-        curl_exe = profilAPIActuel.get('curl_exe', '')
-        api_key = profilAPIActuel.get('api_key', '')
-        replace_apikey = profilAPIActuel.get('replace_apikey', 'GEMINI_API_KEY')
-        
-        if replace_apikey and replace_apikey in curl_exe:
-            curl_exe = curl_exe.replace(replace_apikey, api_key)
-            print(f"[DEBUG] Fallback - ancien système utilisé")
-    else:
-        print(f"[DEBUG] Template traité avec succès ({len(curl_exe)} chars)")
-        print(f"[DEBUG] Clé API remplacée")
-
     try:
-        # MÉTHODE CORRIGÉE pour templates multi-lignes avec JSON complexe
-        # Pattern modifié pour gérer les JSON avec guillemets internes
-        # Utilisation d'une approche plus robuste
+        # Étape 1: Obtenir la commande curl avec template APIManager
+        curl_command = api_manager.get_processed_template(template_id, profilAPIActuel, final_prompt)
         
-        # Trouver la position de -d et la quote ouvrante
-        d_match = re.search(r"-d\s+(['\"])", curl_exe)
+        if not curl_command:
+            print(f"[ERROR] Aucun template trouvé pour {template_id}")
+            return None
         
-        if d_match:
-            quote_char = d_match.group(1)
-            d_start = d_match.end() - 1  # Position de la quote ouvrante
+        print(f"[DEBUG] Template curl obtenu ({len(curl_command)} chars)")
+        
+        # Étape 2: Extraire le JSON du template curl
+        base_command, json_payload = extract_json_from_curl(curl_command)
+        
+        if json_payload is None:
+            print(f"[ERROR] Impossible d'extraire le JSON du template")
+            return curl_command  # Fallback vers ancien système
+        
+        print(f"[DEBUG] JSON payload extrait avec succès")
+        print(f"[DEBUG] Base command: {base_command[:100]}...")
+        
+        # Étape 3: Créer le fichier payload temporaire
+        payload_manager = PayloadManager(api_profile=provider)
+        payload_file = payload_manager.create_payload_file(json_payload, prefix="request")
+        
+        print(f"[DEBUG] Fichier payload créé: {payload_file}")
+        
+        # Étape 4: Construire la nouvelle commande curl avec -d @fichier
+        # Normaliser pour Windows PowerShell
+        if platform.system().lower() == 'windows':
+            # Convertir les continuations en ligne unique
+            base_command = base_command.replace('\\\n', ' ').replace('\n', ' ')
+            base_command = re.sub(r'\s+', ' ', base_command).strip()
             
-            # Trouver la quote fermante correspondante en gérant les échappements
-            quote_end = -1
-            i = d_start + 1
+            # Supprimer les backslashes orphelins en fin
+            base_command = base_command.rstrip(' \\')
             
-            while i < len(curl_exe):
-                if curl_exe[i] == quote_char:
-                    # Vérifier si c'est une quote échappée
-                    escaped = False
-                    j = i - 1
-                    backslash_count = 0
-                    while j >= 0 and curl_exe[j] == '\\':
-                        backslash_count += 1
-                        j -= 1
-                    
-                    # Si nombre impair de backslashes, la quote est échappée
-                    if backslash_count % 2 == 0:
-                        quote_end = i
-                        break
-                i += 1
-            
-            if quote_end > d_start:
-                json_content = curl_exe[d_start + 1:quote_end]
-                print(f"[DEBUG] JSON extrait ({len(json_content)} chars)")
-                
-                try:
-                    # Parser le JSON (déséchapper si nécessaire)
-                    json_to_parse = json_content
-                    if quote_char == '"' and '\\' in json_to_parse:
-                        # Déséchapper pour parsing
-                        json_to_parse = json_to_parse.replace('\\"', '"').replace('\\\\', '\\')
-                    
-                    json_data = json.loads(json_to_parse)
-                    
-                    # Modifier selon la structure API
-                    if 'messages' in json_data and isinstance(json_data['messages'], list):
-                        # Format OpenAI/Claude
-                        for message in reversed(json_data['messages']):
-                            if message.get('role') == 'user':
-                                message['content'] = final_prompt
-                                print(f"[DEBUG] Prompt OpenAI mis à jour")
-                                break
-                    elif 'contents' in json_data:
-                        # Format Gemini
-                        if isinstance(json_data['contents'], list) and len(json_data['contents']) > 0:
-                            if 'parts' in json_data['contents'][0]:
-                                if isinstance(json_data['contents'][0]['parts'], list):
-                                    json_data['contents'][0]['parts'][0]['text'] = final_prompt
-                                    print(f"[DEBUG] Prompt Gemini mis à jour")
-                    elif 'prompt' in json_data:
-                        # Format simple
-                        json_data['prompt'] = final_prompt
-                        print(f"[DEBUG] Prompt simple mis à jour")
-                    
-                    # Régénérer le JSON avec indentation
-                    new_json = json.dumps(json_data, ensure_ascii=False, indent=2)
-                    
-                    # Échappement selon l'OS
-                    if is_windows:
-                        # Windows: échapper les guillemets pour cmd
-                        escaped_json = new_json.replace('"', '\\"')
-                        new_data_part = f'-d "{escaped_json}"'
-                    else:
-                        # Linux/macOS: utiliser guillemets simples
-                        escaped_json = new_json.replace("'", "'\"'\"'")
-                        new_data_part = f"-d '{escaped_json}'"
-                    
-                    # Remplacer la section complète
-                    original_data_part = curl_exe[d_match.start():quote_end + 1]
-                    curl_nouveau = curl_exe.replace(original_data_part, new_data_part)
-                    
-                    print(f"[DEBUG] Template traité avec succès")
-                    return curl_nouveau
-                    
-                except json.JSONDecodeError as e:
-                    print(f"[DEBUG] Erreur parsing JSON: {e}")
-                    # En cas d'erreur JSON, continuer avec l'original
-                    print(f"[DEBUG] Conservation du JSON original")
-                    return curl_exe
-            else:
-                print(f"[DEBUG] Quote fermante non trouvée")
-                return curl_exe
-        else:
-            print(f"[DEBUG] Pattern -d non trouvé")
-                
-        # FALLBACK: Recherche et remplacement simple
-        print(f"[DEBUG] Utilisation fallback")
+            # Ajuster les guillemets pour PowerShell
+            base_command = base_command.replace("-H 'Content-Type: application/json'", 
+                                             '-H "Content-Type: application/json"')
         
-        # Chercher et remplacer les contenus par défaut
-        defaults = ["Explain how AI works", "write a haiku about ai", "Hello", "Test message"]
+        # Construire la commande finale avec référence au fichier
+        final_command = f'{base_command} -d @"{payload_file}"'
         
-        for default in defaults:
-            if default in curl_exe:
-                curl_exe = curl_exe.replace(default, final_prompt)
-                print(f"[DEBUG] Remplacé '{default}' par le prompt")
-                break
+        print(f"[DEBUG] Commande curl finale construite")
+        print(f"[DEBUG] Utilisation fichier: {payload_file}")
         
-        return curl_exe
+        return final_command, payload_file  # Retourner aussi le chemin pour nettoyage
         
     except Exception as e:
-        print(f"[DEBUG] Erreur dans preparer_requete_curl: {e}")
-        return curl_exe
+        print(f"[ERROR] Erreur dans preparer_requete_curl Phase 1: {e}")
+        # Fallback vers ancien système en cas d'erreur
+        return api_manager.get_processed_template(template_id, profilAPIActuel, final_prompt), None
 
 
 
@@ -477,17 +393,21 @@ def corriger_commande_curl(commande):
     return corrected
 
 
-def executer_commande_curl(requete_curl):
+def executer_commande_curl(requete_curl, payload_file=None):
     """
-    Exécute la commande curl et retourne le résultat.
-    Logue la commande et le résultat dans un fichier debug_curl.log.
+    Phase 1 - Exécute la commande curl et nettoie le fichier payload
+    Gestion automatique du nettoyage des fichiers temporaires
     """
-    # Nettoyer et normaliser la commande curl_exe
+    print(f"[DEBUG] === EXÉCUTION CURL PHASE 1 ===")
+    
+    # Nettoyer et normaliser la commande curl
     requete_curl = requete_curl.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
 
     # Loguer la commande dans debug_curl.log
     with open("debug_curl.log", "a", encoding="utf-8") as log_file:
         log_file.write(f"\n--- Commande exécutée ---\n{requete_curl}\n")
+        if payload_file:
+            log_file.write(f"--- Fichier payload utilisé ---\n{payload_file}\n")
 
     try:
         # Exécuter la commande sans forcer l'encodage UTF-8
@@ -499,31 +419,21 @@ def executer_commande_curl(requete_curl):
         
         if resultat.stdout:
             try:
-                # Essayer UTF-8 d'abord
+                # Tentative de décodage UTF-8 d'abord
                 stdout_decoded = resultat.stdout.decode('utf-8')
             except UnicodeDecodeError:
-                try:
-                    # Essayer Windows-1252 (encodage courant Windows)
-                    stdout_decoded = resultat.stdout.decode('cp1252')
-                except UnicodeDecodeError:
-                    try:
-                        # Essayer ISO-8859-1 en dernier recours
-                        stdout_decoded = resultat.stdout.decode('iso-8859-1')
-                    except UnicodeDecodeError:
-                        # Forcer avec des caractères de remplacement
-                        stdout_decoded = resultat.stdout.decode('utf-8', errors='replace')
+                # Fallback avec détection automatique
+                detection = charset_normalizer.detect(resultat.stdout)
+                encoding = detection.get('encoding', 'utf-8')
+                stdout_decoded = resultat.stdout.decode(encoding, errors='ignore')
         
         if resultat.stderr:
             try:
                 stderr_decoded = resultat.stderr.decode('utf-8')
             except UnicodeDecodeError:
-                try:
-                    stderr_decoded = resultat.stderr.decode('cp1252')
-                except UnicodeDecodeError:
-                    try:
-                        stderr_decoded = resultat.stderr.decode('iso-8859-1')
-                    except UnicodeDecodeError:
-                        stderr_decoded = resultat.stderr.decode('utf-8', errors='replace')
+                detection = charset_normalizer.detect(resultat.stderr)
+                encoding = detection.get('encoding', 'utf-8')
+                stderr_decoded = resultat.stderr.decode(encoding, errors='ignore')
         
         # Créer un objet résultat avec les chaînes décodées
         class ResultatDecode:
@@ -534,23 +444,36 @@ def executer_commande_curl(requete_curl):
         
         resultat_decode = ResultatDecode(resultat.returncode, stdout_decoded, stderr_decoded)
         
-    except Exception as e:
-        # En cas d'erreur, créer un résultat d'erreur
-        class ResultatErreur:
-            def __init__(self, erreur):
-                self.returncode = 1
-                self.stdout = ""
-                self.stderr = f"Erreur d'exécution : {erreur}"
+        # Loguer le résultat
+        with open("debug_curl.log", "a", encoding="utf-8") as log_file:
+            log_file.write(f"Return code: {resultat_decode.returncode}\n")
+            log_file.write(f"Stdout: {resultat_decode.stdout[:500]}...\n" if len(resultat_decode.stdout) > 500 else f"Stdout: {resultat_decode.stdout}\n")
+            if resultat_decode.stderr:
+                log_file.write(f"Stderr: {resultat_decode.stderr}\n")
         
-        resultat_decode = ResultatErreur(e)
-
-    # Loguer le résultat dans debug_curl.log
-    with open("debug_curl.log", "a", encoding="utf-8") as log_file:
-        log_file.write(f"--- Résultat ---\nCode de retour : {resultat_decode.returncode}\n")
-        log_file.write(f"Sortie standard : {resultat_decode.stdout}\n")
-        log_file.write(f"Sortie erreur : {resultat_decode.stderr}\n")
-
-    return resultat_decode
+        print(f"[DEBUG] Curl exécuté - Code retour: {resultat_decode.returncode}")
+        
+        return resultat_decode
+    
+    except Exception as e:
+        print(f"[ERROR] Erreur exécution curl: {e}")
+        # Créer un résultat d'erreur
+        class ResultatErreur:
+            def __init__(self):
+                self.returncode = -1
+                self.stdout = ""
+                self.stderr = f"Erreur Python: {str(e)}"
+        
+        return ResultatErreur()
+    
+    finally:
+        # ÉTAPE 3: Nettoyage automatique du fichier payload
+        if payload_file and os.path.exists(payload_file):
+            try:
+                os.remove(payload_file)
+                print(f"[DEBUG] Fichier payload nettoyé: {payload_file}")
+            except Exception as e:
+                print(f"[WARNING] Impossible de nettoyer {payload_file}: {e}")
 
 # Plan de tests pour les logs en console
 # 1. Vérifier que les commandes curl s'exécutent correctement et que la sortie est capturée en UTF-8.
@@ -695,24 +618,21 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 # Fonction wrapper pour l'appel API de résumé
                 def api_summary_call(prompt_text):
                     profil = charger_profil_api()
-                    # CORRECTION: Ne plus utiliser generer_prompt() avec le système de templates modernes
-                    requete_curl = preparer_requete_curl(prompt_text)
+                    # PHASE 1: Utiliser le nouveau système PayloadManager pour les résumés aussi
+                    resultat_preparation = preparer_requete_curl(prompt_text)
                     
-                    # CORRECTION: Même logique de conversion Windows que le code principal
-                    if platform.system().lower() == 'windows':
-                        requete_curl = requete_curl.replace('\\\n', ' ').replace('\n', ' ')
-                        import re
-                        requete_curl = re.sub(r'\s+', ' ', requete_curl).strip()
-                        requete_curl = requete_curl.replace("-H 'Content-Type: application/json'", '-H "Content-Type: application/json"')
-                        
-                        if " -d '{" in requete_curl and requete_curl.endswith("}'"):
-                            start_json = requete_curl.find(" -d '{") + 5
-                            json_part = requete_curl[start_json:-2]
-                            json_escaped = json_part.replace('"', '\\"')
-                            prefix = requete_curl[:requete_curl.find(" -d '{")]
-                            requete_curl = f'{prefix} -d "{json_escaped}"'
+                    # Vérifier si on a un fichier payload ou ancien système
+                    if isinstance(resultat_preparation, tuple) and len(resultat_preparation) == 2:
+                        # Nouveau système Phase 1 avec fichier payload
+                        requete_curl, payload_file = resultat_preparation
+                        print(f"[DEBUG] Phase 1 résumé - Fichier payload: {payload_file}")
+                    else:
+                        # Ancien système fallback
+                        requete_curl = resultat_preparation
+                        payload_file = None
+                        print(f"[DEBUG] Résumé fallback ancien système")
                     
-                    resultat = executer_commande_curl(requete_curl)
+                    resultat = executer_commande_curl(requete_curl, payload_file)
                     
                     if resultat.returncode == 0:
                         try:
@@ -788,37 +708,29 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
         # 5. Exécuter l'appel API principal
         profil = charger_profil_api()
         
-        # CORRECTION: Ne pas utiliser generer_prompt() avec le système de templates moderne
-        # Le template gère déjà les placeholders {{SYSTEM_PROMPT_ROLE}} et {{SYSTEM_PROMPT_BEHAVIOR}}
-        # generer_prompt() était pour l'ancien système sans templates
-        requete_curl = preparer_requete_curl(question_finale)
+        # PHASE 1: Utiliser le nouveau système PayloadManager
+        print("[DEBUG] === UTILISATION PHASE 1 - PAYLOAD MANAGER ===")
+        resultat_preparation = preparer_requete_curl(question_finale)
         
-        # SOLUTION FINALE : Ne plus jamais utiliser corriger_commande_curl() 
-        # Le système APIManager génère des commandes curl parfaites pour Windows
-        # La fonction corriger_commande_curl() était pour l'ancien système et casse les templates modernes
-        print("[DEBUG] Skip correction curl - Template APIManager déjà parfait pour Windows")
-        
-        # CONVERSION WINDOWS SIMPLIFIÉE : Le contenu JSON est déjà échappé par ConversationManager
-        if platform.system().lower() == 'windows':
-            # Convertir les continuations \ en ligne unique pour PowerShell
-            requete_curl = requete_curl.replace('\\\n', ' ').replace('\n', ' ')
-            # Nettoyer les espaces multiples
-            import re
-            requete_curl = re.sub(r'\s+', ' ', requete_curl).strip()
-            
-            # Remplacer guillemets simples par doubles pour headers et JSON
-            requete_curl = requete_curl.replace("-H 'Content-Type: application/json'", '-H "Content-Type: application/json"')
-            requete_curl = requete_curl.replace(" -d '{", ' -d "{')
-            requete_curl = requete_curl.replace("}'", '}"')
-            
-            print("[DEBUG] Conversion Windows PowerShell simple appliquée")
+        # Vérifier si on a un fichier payload ou ancien système
+        if isinstance(resultat_preparation, tuple) and len(resultat_preparation) == 2:
+            # Nouveau système Phase 1 avec fichier payload
+            requete_curl, payload_file = resultat_preparation
+            print(f"[DEBUG] Phase 1 - Fichier payload: {payload_file}")
+        else:
+            # Ancien système fallback
+            requete_curl = resultat_preparation
+            payload_file = None
+            print(f"[DEBUG] Fallback ancien système")
         
         # ÉTAPE 2 DEBUG : Journaliser la requête JSON finale
         print("=" * 60)
-        print("🔍 ÉTAPE 2 - REQUÊTE JSON FINALE")
+        print("🔍 ÉTAPE 2 - REQUÊTE CURL PHASE 1")
         print("=" * 60)
         print(f"Question finale (après échappement): {len(question_finale)} chars")
         print(f"Requête curl: {len(requete_curl)} chars")
+        if payload_file:
+            print(f"Fichier payload: {payload_file}")
         print("")
         print("CONTENU question_finale:")
         print(question_finale[:500] + "..." if len(question_finale) > 500 else question_finale)
@@ -827,7 +739,8 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
         print(requete_curl)
         print("=" * 60)
         
-        resultat = executer_commande_curl(requete_curl)
+        # Exécuter avec le nouveau système qui gère automatiquement le nettoyage
+        resultat = executer_commande_curl(requete_curl, payload_file)
         
         # ÉTAPE 2 DEBUG : Journaliser la réponse brute
         print("=" * 60)

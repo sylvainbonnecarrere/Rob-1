@@ -468,7 +468,7 @@ class APIManager(IProfileManager):
     def _replace_placeholders(self, template_content: str, profile_data: Dict[str, Any], user_prompt: str = "") -> str:
         """
         Remplace tous les placeholders d'un template par les vraies valeurs
-        NOUVEAU: Phase 1 - Logique robuste de remplacement
+        NOUVEAU: Phase 1 - Logique robuste de remplacement avec échappement JSON
         
         Args:
             template_content: Contenu du template avec placeholders
@@ -481,11 +481,29 @@ class APIManager(IProfileManager):
         try:
             content = template_content
             
-            # Placeholders standards
+            # Fonction d'échappement JSON pour les valeurs contenant des caractères spéciaux
+            def escape_json_value(value):
+                """Échappe les caractères spéciaux pour JSON"""
+                if not isinstance(value, str):
+                    return str(value)
+                
+                # Échapper les caractères JSON essentiels
+                escaped = value
+                escaped = escaped.replace('\\', '\\\\')  # Échapper les backslashes en premier
+                escaped = escaped.replace('"', '\\"')    # Échapper les guillemets doubles
+                escaped = escaped.replace('\n', '\\n')   # Échapper les retours à la ligne
+                escaped = escaped.replace('\r', '\\r')   # Échapper les retours chariot
+                escaped = escaped.replace('\t', '\\t')   # Échapper les tabulations
+                escaped = escaped.replace('\b', '\\b')   # Échapper les backspaces
+                escaped = escaped.replace('\f', '\\f')   # Échapper les form feeds
+                
+                return escaped
+            
+            # Placeholders standards avec échappement pour USER_PROMPT
             replacements = {
                 '{{API_KEY}}': profile_data.get('api_key', ''),
                 '{{LLM_MODEL}}': profile_data.get('model', profile_data.get('llm_model', '')),
-                '{{USER_PROMPT}}': user_prompt,
+                '{{USER_PROMPT}}': escape_json_value(user_prompt),  # ← ÉCHAPPEMENT JSON
                 '{{SYSTEM_PROMPT_ROLE}}': profile_data.get('role', ''),
                 '{{SYSTEM_PROMPT_BEHAVIOR}}': profile_data.get('behavior', ''),
             }
