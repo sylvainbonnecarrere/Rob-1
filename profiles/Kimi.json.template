@@ -6,11 +6,11 @@
   "behavior": "Assistant IA conversationnel avec capacités de recherche web intégrées",
   "history": false,
   "default": false,
-  "replace_apikey": "OPENROUTER_API_KEY",
+  "replace_apikey": "$OPENROUTER_API_KEY",
   "template_id": "kimi_chat",
   "method": "curl",
   "template_type": "chat",
-  "llm_model": "kimi-k2-preview",
+  "llm_model": "gemini-2.5-flash",
   "response_path": ["choices", 0, "message", "content"],
   "file_generation": {
     "enabled": false,

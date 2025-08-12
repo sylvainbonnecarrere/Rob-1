@@ -20,6 +20,7 @@ class APIResponseParser:
             'gemini': self._parse_gemini_response,
             'openai': self._parse_openai_response,
             'claude': self._parse_claude_response,
+            'qwen': self._parse_qwen_response,
             'auto': self._auto_detect_and_parse
         }
     
@@ -73,7 +74,8 @@ class APIResponseParser:
         detection_rules = [
             ('candidates', 'gemini'),
             ('choices', 'openai'),
-            ('content', 'claude')
+            ('content', 'claude'),
+            ('output', 'qwen')
         ]
         
         for key, api_type in detection_rules:
@@ -155,6 +157,24 @@ class APIResponseParser:
                 
         except (KeyError, IndexError, TypeError) as e:
             return False, f"Structure Claude invalide: {e}", "claude"
+    
+    def _parse_qwen_response(self, response_json: Dict[str, Any]) -> Tuple[bool, str, str]:
+        """Parse une réponse Qwen/Alibaba"""
+        try:
+            if "error" in response_json:
+                error_msg = response_json["error"].get("message", "Erreur inconnue")
+                return False, f"Erreur API Qwen: {error_msg}", "qwen"
+            
+            # Format standard Qwen
+            if "output" in response_json and "text" in response_json["output"]:
+                text = response_json["output"]["text"]
+                return True, text, "qwen"
+            
+            else:
+                return False, "Format Qwen non reconnu", "qwen"
+                
+        except (KeyError, IndexError, TypeError) as e:
+            return False, f"Structure Qwen invalide: {e}", "qwen"
     
     def register_custom_parser(self, api_name: str, parser_function: Callable):
         """

@@ -1,22 +1,17 @@
 {
-  "profil": "Claude",
-  "nom": "Claude",
+  "name": "Claude",
+  "api_url": "https://api.anthropic.com/v1/messages",
   "api_key": "YOUR_CLAUDE_API_KEY_HERE",
-  "replace_apikey": "CLAUDE_API_KEY",
-  "template_id": "claude_chat",
+  "role": "assistant IA analytique",
+  "behavior": "réponses analytiques et approfondies, raisonnement étape par étape",
+  "history": true,
   "default": false,
-  "history": false,
-  "role": "",
-  "behavior": "",
-  "conversation": {
-    "enabled": true,
-    "max_context_length": 4000,
-    "summary_enabled": true,
-    "summary_trigger_length": 8000,
-    "summary_target_length": 2000,
-    "summary_template_id": "claude_summary",
-    "conversation_file": "conversations/conversation.txt"
-  },
+  "replace_apikey": "$ANTHROPIC_API_KEY",
+  "template_id": "claude_chat",
+  "method": "curl",
+  "template_type": "chat",
+  "llm_model": "claude-3-sonnet-20240229",
+  "response_path": ["content", 0, "text"],
   "file_generation": {
     "enabled": false,
     "mode": "simple",
@@ -29,5 +24,16 @@
     "dev_config": {
       "extension": ".py"
     }
+  },
+  "conversation_management": {
+    "words_enabled": true,
+    "sentences_enabled": true,
+    "tokens_enabled": false,
+    "word_threshold": 300,
+    "sentence_threshold": 15,
+    "token_threshold": 1000,
+    "summary_template": "Template Claude",
+    "custom_instructions": "Résume la conversation précédente en conservant les points clés et le contexte important.",
+    "auto_save": true
   }
 }

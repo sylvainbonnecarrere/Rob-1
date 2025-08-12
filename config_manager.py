@@ -402,9 +402,27 @@ class ConfigManager:
         """
         Crée les profils par défaut à partir des templates sécurisés si ils n'existent pas
         SÉCURITÉ: Les templates ne contiennent jamais de clés API
+        AUTO-DÉTECTION: Parcourt tous les fichiers *.json.template
         """
         success = True
-        templates = ["Gemini", "Claude", "OpenAI"]
+        
+        # AUTO-DÉTECTION: Parcourir tous les templates disponibles
+        templates = []
+        try:
+            for filename in os.listdir(self.profiles_dir):
+                if filename.endswith('.json.template'):
+                    template_name = filename.replace('.json.template', '')
+                    templates.append(template_name)
+            
+            if not templates:
+                self.logger.warning("⚠️ Aucun template trouvé dans profiles/")
+                return False
+                
+            self.logger.info(f"📋 Templates détectés: {templates}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Erreur lors de la détection des templates: {e}")
+            return False
         
         for template_name in templates:
             profile_path = os.path.join(self.profiles_dir, f"{template_name}.json")

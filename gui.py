@@ -2462,13 +2462,13 @@ def creer_interface():
     # Barre de menu principale
     menu_bar = Menu(root)
 
-    # Menu API (anciennement Test API)
+    # Menu Config (anciennement API)
     menu_api = Menu(menu_bar, tearoff=0)
     menu_api.add_command(label="Test API", command=ouvrir_fenetre_apitest)
     menu_api.add_command(label="Set up API", command=open_setup_menu)
     menu_api.add_command(label="Set up File", command=open_setup_file_menu)
     menu_api.add_command(label="Setup History", command=open_setup_history_menu)
-    menu_bar.add_cascade(label="API", menu=menu_api)
+    menu_bar.add_cascade(label="Config", menu=menu_api)
 
     # Configuration de la barre de menu
     root.config(menu=menu_bar)
