@@ -218,86 +218,10 @@ if __name__ == "__main__":
         }
     }
     
-    # Profils par défaut embarqués
-    EMBEDDED_DEFAULT_PROFILES = {
-        "gemini": {
-            "name": "Gemini",
-            "api_url": "https://generativelanguage.googleapis.com/v1beta/models",
-            "api_key": "",  # À remplir par l'utilisateur
-            "role": "assistant IA polyvalent",
-            "behavior": "réponses précises et détaillées, ton professionnel et bienveillant",
-            "history": True,
-            "default": True,
-            "replace_apikey": "GEMINI_API_KEY",
-            "method": "curl",
-            "mode": "curl",  # Champ requis pour validation
-            "template_type": "chat",
-            "llm_model": "gemini-2.0-flash",
-            "model": "gemini-2.0-flash",  # Champ requis pour validation
-            "file_generation": {
-                "enabled": False,
-                "mode": "simple",
-                "simple_config": {
-                    "include_question": True,
-                    "include_response": True,
-                    "base_filename": "conversation",
-                    "same_file": True
-                }
-            }
-        },
-        
-        "openai": {
-            "name": "OpenAI",
-            "api_url": "https://api.openai.com/v1/chat/completions",
-            "api_key": "",  # À remplir par l'utilisateur
-            "role": "assistant IA créatif",
-            "behavior": "réponses créatives et structurées, exemples concrets",
-            "history": True,
-            "default": False,
-            "replace_apikey": "OPENAI_API_KEY",
-            "method": "curl",
-            "mode": "curl",  # Champ requis pour validation
-            "template_type": "chat",
-            "llm_model": "gpt-4o-mini",
-            "model": "gpt-4o-mini",  # Champ requis pour validation
-            "file_generation": {
-                "enabled": False,
-                "mode": "simple",
-                "simple_config": {
-                    "include_question": True,
-                    "include_response": True,
-                    "base_filename": "conversation",
-                    "same_file": True
-                }
-            }
-        },
-        
-        "claude": {
-            "name": "Claude",
-            "api_url": "https://api.anthropic.com/v1/messages",
-            "api_key": "",  # À remplir par l'utilisateur
-            "role": "assistant IA analytique",
-            "behavior": "réponses analytiques et approfondies, raisonnement étape par étape",
-            "history": True,
-            "default": False,
-            "replace_apikey": "CLAUDE_API_KEY",
-            "method": "curl",
-            "mode": "curl",  # Champ requis pour validation
-            "template_type": "chat",
-            "llm_model": "claude-3-sonnet-20240229",
-            "model": "claude-3-sonnet-20240229",  # Champ requis pour validation
-            "file_generation": {
-                "enabled": False,
-                "mode": "simple",
-                "simple_config": {
-                    "include_question": True,
-                    "include_response": True,
-                    "base_filename": "conversation",
-                    "same_file": True
-                }
-            }
-        }
-    }
+    # SUPPRIMÉ - DIRECTIVE ARCHITECTE : SOURCE UNIQUE DE VÉRITÉ
+    # Les profils par défaut sont maintenant générés uniquement à partir des fichiers .json.template
+    # Élimination des données hardcodées pour éviter les incohérences et les champs manquants
+    # ConfigManager.create_default_profiles() gère toute l'initialisation depuis les templates
     
     def __init__(self, config_manager: Optional[ConfigManager] = None):
         """
@@ -314,57 +238,18 @@ if __name__ == "__main__":
     
     def install_default_profiles(self) -> bool:
         """
-        Installe les profils LLM par défaut si ils n'existent pas
+        DÉSACTIVÉ - DIRECTIVE ARCHITECTE : SOURCE UNIQUE DE VÉRITÉ
+        
+        Cette méthode utilisait EMBEDDED_DEFAULT_PROFILES qui créait des profils INCOMPLETS
+        sans response_path. Maintenant seul ConfigManager.create_default_profiles() 
+        crée les profils à partir des fichiers .json.template COMPLETS.
         
         Returns:
-            bool: True si l'installation s'est bien passée
+            bool: True (ne fait rien, ConfigManager gère tout)
         """
-        if not self.config_manager:
-            self.logger.error("ConfigManager requis pour l'installation des profils")
-            return False
-        
-        try:
-            print("📋 Installation des profils par défaut...")
-            
-            installed_count = 0
-            updated_count = 0
-            
-            for provider_name, profile_data in self.EMBEDDED_DEFAULT_PROFILES.items():
-                profile_name = profile_data["name"]
-                
-                # Vérifier si le profil existe déjà
-                existing_profile = self.config_manager.load_profile(profile_name)
-                
-                if existing_profile:
-                    # Profil existe - vérifier s'il faut le mettre à jour
-                    if self._should_update_profile(existing_profile, profile_data):
-                        # Conserver les données utilisateur (clé API, etc.)
-                        updated_profile = self._merge_profile_data(existing_profile, profile_data)
-                        
-                        if self.config_manager.save_profile(profile_name, updated_profile):
-                            print(f"🔄 Profil mis à jour: {profile_name}")
-                            updated_count += 1
-                        else:
-                            print(f"⚠️ Échec mise à jour profil: {profile_name}")
-                    else:
-                        print(f"✅ Profil existant à jour: {profile_name}")
-                else:
-                    # Nouveau profil - installer
-                    if self.config_manager.save_profile(profile_name, profile_data):
-                        print(f"🆕 Profil installé: {profile_name}")
-                        installed_count += 1
-                    else:
-                        print(f"❌ Échec installation profil: {profile_name}")
-            
-            print(f"📊 Installation profils: {installed_count} nouveaux, {updated_count} mis à jour")
-            self.logger.info(f"Profils installés: {installed_count} nouveaux, {updated_count} mis à jour")
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Erreur installation profils par défaut: {e}")
-            print(f"❌ Erreur installation profils: {e}")
-            return False
+        print("ℹ️ install_default_profiles() désactivé - ConfigManager gère l'initialisation")
+        print("✅ Profils créés à partir des templates .json.template complets")
+        return True
     
     def install_api_templates(self) -> bool:
         """

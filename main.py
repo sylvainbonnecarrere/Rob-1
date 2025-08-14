@@ -221,15 +221,11 @@ exit $EXIT_CODE
 def ensure_templates_installed():
     """S'assure que tous les templates API sont correctement installés"""
     try:
-        from install_templates import create_api_templates, create_profile_templates
+        # SIMPLIFIÉ - DIRECTIVE ARCHITECTE : SOURCE UNIQUE DE VÉRITÉ
+        # Suppression de create_profile_templates() qui n'existe pas et causait des erreurs
+        # ConfigManager.create_default_profiles() gère toute l'initialisation depuis .json.template
         
-        # Générer/vérifier les templates API
-        create_api_templates()
-        
-        # Générer les templates de profils si nécessaire
-        create_profile_templates()
-        
-        logging.info("✅ Templates API vérifiés et mis à jour")
+        logging.info("✅ Templates gérés par ConfigManager via .json.template")
         return True
         
     except Exception as e:
