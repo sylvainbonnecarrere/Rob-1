@@ -159,6 +159,20 @@ class ConfigManager:
         os.makedirs(self.system_dir, exist_ok=True)
         
         self.logger = logging.getLogger(__name__)
+        
+        # FIX CRITIQUE: Créer automatiquement les profils .json à partir des .template
+        # sur nouvelle installation pour éviter response_path=[] lors du parsing
+        try:
+            # Vérifier s'il y a des profils .json existants
+            json_files = [f for f in os.listdir(self.profiles_dir) if f.endswith('.json')]
+            if not json_files:
+                self.logger.info("🔧 Nouvelle installation détectée - Création des profils par défaut...")
+                if self.create_default_profiles():
+                    self.logger.info("✅ Profils par défaut créés avec succès")
+                else:
+                    self.logger.warning("⚠️ Échec de création des profils par défaut")
+        except Exception as e:
+            self.logger.error(f"❌ Erreur lors de l'auto-initialisation des profils: {e}")
     
     def validate_profile(self, profile_data: Dict[str, Any]) -> bool:
         """Valide un profil selon le schéma JSON"""
