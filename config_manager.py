@@ -218,18 +218,85 @@ class ConfigManager:
             self.logger.error(f"Erreur chargement profil {profile_name} : {e}")
             return None
     
+    def _auto_fix_missing_response_path(self, profile: Dict[str, Any], profile_name: str) -> Dict[str, Any]:
+        """
+        Correction défensive: Auto-corrige un profil sans response_path en utilisant le template
+        FIX CRITIQUE pour profils modifiés manuellement sans response_path
+        """
+        if 'response_path' in profile:
+            return profile  # Pas besoin de correction
+        
+        self.logger.warning(f"🔧 Correction automatique: {profile_name} manque response_path")
+        
+        # Essayer d'abord le template spécifique
+        template_path = os.path.join(self.profiles_dir, f"{profile_name}.json.template")
+        
+        # Si pas de template spécifique, utiliser des templates de référence
+        fallback_templates = ['Gemini.json.template', 'Claude.json.template', 'OpenAI.json.template']
+        
+        template_paths_to_try = [template_path] + [
+            os.path.join(self.profiles_dir, template) for template in fallback_templates
+        ]
+        
+        for template_path_attempt in template_paths_to_try:
+            try:
+                if os.path.exists(template_path_attempt):
+                    with open(template_path_attempt, 'r', encoding='utf-8') as f:
+                        template = json.load(f)
+                    
+                    if 'response_path' in template:
+                        # Copier response_path du template
+                        profile['response_path'] = template['response_path']
+                        template_name = os.path.basename(template_path_attempt)
+                        self.logger.info(f"   ✅ response_path restauré depuis {template_name}: {template['response_path']}")
+                        
+                        # Sauvegarder le profil corrigé
+                        profile_path = os.path.join(self.profiles_dir, f"{profile_name}.json")
+                        with open(profile_path, 'w', encoding='utf-8') as f:
+                            json.dump(profile, f, indent=2, ensure_ascii=False)
+                        
+                        self.logger.info(f"   ✅ Profil {profile_name}.json auto-corrigé et sauvegardé")
+                        return profile
+                        
+            except Exception as e:
+                self.logger.debug(f"   Échec template {template_path_attempt}: {e}")
+                continue
+        
+        # Si aucun template trouvé, utiliser un response_path par défaut pour Gemini
+        if not profile.get('response_path'):
+            default_response_path = ["candidates", 0, "content", "parts", 0, "text"]
+            profile['response_path'] = default_response_path
+            self.logger.info(f"   ⚡ response_path par défaut appliqué: {default_response_path}")
+            
+            # Sauvegarder avec response_path par défaut
+            try:
+                profile_path = os.path.join(self.profiles_dir, f"{profile_name}.json")
+                with open(profile_path, 'w', encoding='utf-8') as f:
+                    json.dump(profile, f, indent=2, ensure_ascii=False)
+                self.logger.info(f"   ✅ Profil {profile_name}.json sauvegardé avec response_path par défaut")
+            except Exception as e:
+                self.logger.error(f"   ❌ Erreur sauvegarde response_path par défaut: {e}")
+        
+        return profile
+
     def get_default_profile(self) -> Optional[Dict[str, Any]]:
-        """Récupère le profil marqué comme défaut"""
+        """Récupère le profil marqué comme défaut avec auto-correction défensive"""
         try:
             for filename in os.listdir(self.profiles_dir):
                 if filename.endswith('.json'):
                     profile_name = filename[:-5]  # Retirer .json
                     profile = self.load_profile(profile_name)
                     if profile and profile.get('default', False):
+                        # FIX DÉFENSIF: Auto-corriger si response_path manquant
+                        profile = self._auto_fix_missing_response_path(profile, profile_name)
                         return profile
             
             # Fallback sur Gemini si aucun défaut trouvé
-            return self.load_profile('Gemini')
+            gemini_profile = self.load_profile('Gemini')
+            if gemini_profile:
+                # FIX DÉFENSIF: Auto-corriger Gemini si response_path manquant
+                gemini_profile = self._auto_fix_missing_response_path(gemini_profile, 'Gemini')
+            return gemini_profile
         except Exception as e:
             self.logger.error(f"Erreur récupération profil défaut : {e}")
             return None
