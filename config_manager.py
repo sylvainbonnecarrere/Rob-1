@@ -24,6 +24,13 @@ PROFILE_SCHEMA = {
         "history": {"type": "boolean"},
         "replace_apikey": {"type": "string"},
         "template_id": {"type": "string"},  # Référence vers template séparé
+        "method": {"type": "string"},  # Nouveau: curl, python, etc.
+        "template_type": {"type": "string"},  # Nouveau: chat, completion, etc.
+        "llm_model": {"type": "string"},  # Nouveau: modèle LLM
+        "response_path": {  # Nouveau: chemin pour extraire la réponse
+            "type": "array",
+            "items": {"type": ["string", "integer"]}
+        },
         "file_generation": {
             "type": "object",
             "properties": {
@@ -46,7 +53,21 @@ PROFILE_SCHEMA = {
                 }
             }
         },
-        "conversation": {
+        "conversation_management": {  # Nouveau format
+            "type": "object",
+            "properties": {
+                "words_enabled": {"type": "boolean"},
+                "sentences_enabled": {"type": "boolean"},
+                "tokens_enabled": {"type": "boolean"},
+                "word_threshold": {"type": "integer"},
+                "sentence_threshold": {"type": "integer"},
+                "token_threshold": {"type": "integer"},
+                "summary_template": {"type": "string"},
+                "custom_instructions": {"type": "string"},
+                "auto_save": {"type": "boolean"}
+            }
+        },
+        "conversation": {  # Ancien format pour compatibilité
             "type": "object",
             "properties": {
                 "intelligent_management": {"type": "boolean"},
