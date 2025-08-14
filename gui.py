@@ -1463,11 +1463,21 @@ def open_setup_menu():
         models = []
         
         if provider == "openai":
-            models = ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
+            models = ["gpt-5-mini-2025-08-07", "gpt-5-2025-08-07", "gpt-5-nano-2", "gpt-4.1-2025-04-14", "gpt-4o", "gpt-4o-mini", "gpt-4o-turbo", "gpt-oss-120b", "gpt-oss-20b", "o4-mini-deep-research-2025-06-26"]
         elif provider == "gemini":
-            models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+            models = ["gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]
         elif provider == "claude":
-            models = ["claude-3-sonnet-20240229", "claude-3-opus-20240229", "claude-3-haiku-20240307"]
+            models = ["claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219", "claude-sonnet-4-20250514", "claude-opus-4-20250514"]
+        elif provider == "anthropic":
+            models = ["claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219", "claude-sonnet-4-20250514", "claude-opus-4-20250514"]
+        elif provider == "grok":
+            models = ["grok-3-mini", "grok-3", "grok-4", "grok-4-0709"]
+        elif provider == "qwen":
+            models = ["qwen-flash", "qwen-turbo", "qwen-omni-turbo", "qwen-max"]
+        elif provider == "mistral":
+            models = ["mistral-medium-2508", "magistral-medium-2507", "ministral-8b-2410", "ministral-3b-2410", "mistral-small-2407", "codestral-2508", "devstral-medium-2507"]
+        elif provider == "kimi":
+            models = ["moonshotai/kimi-k2", "moonshotai/kimi-dev-72b:free", "moonshotai/kimi-vl-a3b-thinking", "moonshotai/moonlight-16b-a3b-instruct"]
         
         llm_model_combobox['values'] = models
         if models:

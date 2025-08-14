@@ -13,6 +13,6 @@ curl https://api.x.ai/v1/chat/completions \
             "content": "{{USER_PROMPT}}"
         }
     ],
-    "model": "grok-4",
+    "model": "{{LLM_MODEL}}",
     "stream": false
 }'
