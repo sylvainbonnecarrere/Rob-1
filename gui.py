@@ -1645,7 +1645,26 @@ def open_setup_menu():
             template_content = mettre_a_jour_modele_dans_template(template_content, llm_model, profil_selectionne.lower())
             curl_exe_var.set(template_content)
 
-        config_data = {
+        # 🔧 CORRECTION ARCHITECTE: Charger d'abord le template complet
+        # puis modifier seulement les champs saisis par l'utilisateur
+        template_path = os.path.join("profiles", f"{profil_selectionne}.json.template")
+        
+        if os.path.exists(template_path):
+            # Charger le template complet avec tous les champs (y compris response_path)
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                print(f"✅ Setup API: Template {profil_selectionne} chargé avec {len(config_data)} champs")
+            except Exception as e:
+                print(f"❌ Erreur chargement template {template_path}: {e}")
+                # Fallback vers ancien système si le template est corrompu
+                config_data = {}
+        else:
+            print(f"⚠️ Template {template_path} introuvable - création profil minimal")
+            config_data = {}
+
+        # Mettre à jour seulement les champs modifiés par l'utilisateur
+        config_data.update({
             "name": profil_selectionne,
             "api_url": api_url_entry.get(),
             "api_key": api_key_entry.get().strip(),
@@ -1658,7 +1677,11 @@ def open_setup_menu():
             "method": selected_method.get(),  # Nouveau champ V2
             "template_type": selected_template_type.get(),  # Nouveau champ V2
             "llm_model": selected_llm_model.get(),  # Nouveau champ V2
-            "file_generation": {
+        })
+        
+        # Assurer que file_generation existe (peut venir du template ou par défaut)
+        if "file_generation" not in config_data:
+            config_data["file_generation"] = {
                 "enabled": False,
                 "mode": "simple",
                 "simple_config": {
@@ -1671,7 +1694,6 @@ def open_setup_menu():
                     "extension": ".py"
                 }
             }
-        }
 
         try:
             # Sauvegarder via ConfigManager
