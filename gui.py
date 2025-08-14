@@ -215,12 +215,15 @@ def initialiser_profils_par_defaut():
             with open(chemin_fichier, "w", encoding="utf-8") as fichier:
                 json.dump(contenu, fichier, indent=2, ensure_ascii=False)
 
-# Appeler cette fonction au démarrage si aucun fichier JSON n'est trouvé
-if not any(f.endswith(".json") and not f.endswith(".json.template") for f in os.listdir(PROFILES_DIR)):
-    logging.info("No JSON profiles found. Initializing default profiles.")
-    initialiser_profils_par_defaut()
-else:
-    logging.info("JSON profiles found. Skipping default profile initialization.")
+# DÉSACTIVÉ - DIRECTIVE ARCHITECTE: ConfigManager gère maintenant toute l'initialisation
+# La fonction initialiser_profils_par_defaut() créait des profils INCOMPLETS sans response_path
+# ConfigManager.create_default_profiles() utilise les templates .json.template COMPLETS
+# 
+# if not any(f.endswith(".json") and not f.endswith(".json.template") for f in os.listdir(PROFILES_DIR)):
+#     logging.info("No JSON profiles found. Initializing default profiles.")
+#     initialiser_profils_par_defaut()
+# else:
+#     logging.info("JSON profiles found. Skipping default profile initialization.")
 
 def ouvrir_fenetre_comportement():
     """Ouvre une fenêtre pour gérer les comportements."""
