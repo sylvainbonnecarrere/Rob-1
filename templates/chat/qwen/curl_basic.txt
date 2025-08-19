@@ -9,7 +9,7 @@ curl https://openrouter.ai/api/v1/chat/completions \
       "content": "{{USER_PROMPT}}"
     },
     { 
-      "role": 'assistant', 
+      "role": "assistant", 
       "content": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}" 
     }
   ]
