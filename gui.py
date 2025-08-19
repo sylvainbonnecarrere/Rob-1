@@ -1476,7 +1476,7 @@ def open_setup_menu():
         elif provider == "grok":
             models = ["grok-3-mini", "grok-3", "grok-4", "grok-4-0709"]
         elif provider == "qwen":
-            models = ["qwen-flash", "qwen-turbo", "qwen-omni-turbo", "qwen-max"]
+            models = ["qwen-flash", "qwen-turbo", "qwen-omni-turbo", "qwen-max", "qwen/qwen3-coder:free"]
         elif provider == "mistral":
             models = ["mistral-medium-2508", "magistral-medium-2507", "ministral-8b-2410", "ministral-3b-2410", "mistral-small-2407", "codestral-2508", "devstral-medium-2507"]
         elif provider == "kimi":
