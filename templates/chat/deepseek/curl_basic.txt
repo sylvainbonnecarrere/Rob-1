@@ -1,0 +1,18 @@
+
+curl https://openrouter.ai/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {{API_KEY}}" \
+  -d '{
+  "model": "{{LLM_MODEL}}",
+  "messages": [
+    {
+          "role": "system",
+          "content": "{{SYSTEM_PROMPT_ROLE}} {{SYSTEM_PROMPT_BEHAVIOR}}"
+    },
+    {
+      "role": "user",
+      "content": "{{USER_PROMPT}}"
+    }
+  ]
+  
+}'

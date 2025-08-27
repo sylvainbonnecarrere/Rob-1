@@ -1481,6 +1481,8 @@ def open_setup_menu():
             models = ["mistral-medium-2508", "magistral-medium-2507", "ministral-8b-2410", "ministral-3b-2410", "mistral-small-2407", "codestral-2508", "devstral-medium-2507"]
         elif provider == "kimi":
             models = ["moonshotai/kimi-k2", "moonshotai/kimi-dev-72b:free", "moonshotai/kimi-vl-a3b-thinking", "moonshotai/moonlight-16b-a3b-instruct"]
+        elif provider == "deepseek":
+            models = ["deepseek/deepseek-r1-0528-qwen3-8b:free", "deepseek-chat", "deepseek-reasoning"]
         
         llm_model_combobox['values'] = models
         if models:
@@ -1503,6 +1505,10 @@ def open_setup_menu():
             match = re.search(r'models/([^:?]+)', template_content)
             return match.group(1) if match else ""
         elif provider == "claude" and '"model":' in template_content:
+            import re
+            match = re.search(r'"model":\s*"([^"]+)"', template_content)
+            return match.group(1) if match else ""
+        elif provider == "deepseek" and '"model":' in template_content:
             import re
             match = re.search(r'"model":\s*"([^"]+)"', template_content)
             return match.group(1) if match else ""
@@ -1727,6 +1733,9 @@ def open_setup_menu():
             # Remplacer models/ancien-model: par models/nouveau-model:
             return re.sub(r'models/[^:?]+', f'models/{model}', template)
         elif provider == "claude":
+            # Remplacer "model": "ancien-model" par "model": "nouveau-model"
+            return re.sub(r'"model":\s*"[^"]+"', f'"model": "{model}"', template)
+        elif provider == "deepseek":
             # Remplacer "model": "ancien-model" par "model": "nouveau-model"
             return re.sub(r'"model":\s*"[^"]+"', f'"model": "{model}"', template)
         
