@@ -1374,7 +1374,8 @@ def open_setup_menu():
         profil_selectionne = selected_model.get()
         donnees_profil = charger_donnees_profil(profil_selectionne)
 
-        api_url_var.set(donnees_profil.get("api_url", ""))
+        # NE PAS écraser api_url_var car il est utilisé pour USER_PROMPT, pas pour URL
+        # api_url_var.set(donnees_profil.get("api_url", ""))  # COMMENTÉ: cause confusion URL/USER_PROMPT
         api_key_var.set(donnees_profil.get("api_key", ""))
         role_var.set(donnees_profil.get("role", ""))
         default_behavior_var.set(donnees_profil.get("behavior", ""))
@@ -1433,9 +1434,9 @@ def open_setup_menu():
         method = selected_method.get()
         if method == "curl":
             # Mode curl : afficher les champs curl
-            api_url_label.config(text="Texte à remplacer :")
-            curl_exe_label.grid(row=11, column=0, sticky="nw", pady=5, padx=(10,5))
-            curl_frame.grid(row=11, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+            # NOTE: Le texte du label sera géré par creer_champs_dynamiques()
+            curl_exe_label.grid(row=14, column=0, sticky="nw", pady=5, padx=(10,5))
+            curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
         elif method == "native (bientôt)":
             # Mode native : masquer commande curl, changer le label
             api_url_label.config(text="Paramètres template :")
@@ -1483,6 +1484,8 @@ def open_setup_menu():
             models = ["moonshotai/kimi-k2", "moonshotai/kimi-dev-72b:free", "moonshotai/kimi-vl-a3b-thinking", "moonshotai/moonlight-16b-a3b-instruct"]
         elif provider == "deepseek":
             models = ["deepseek/deepseek-r1-0528-qwen3-8b:free", "deepseek-chat", "deepseek-reasoning"]
+        elif provider == "lmstudio":
+            models = ["lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF", "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", "TheBloke/CodeLlama-34B-Instruct-GGUF", "google/gemma-3-1b", "lmstudio-community/gemma-3-12b-it-GGUF", "lmstudio-community/MiniCPM-V-2_6-GGUF"]
         
         llm_model_combobox['values'] = models
         if models:
@@ -1490,6 +1493,27 @@ def open_setup_menu():
     
     # Bind pour mise à jour automatique des modèles
     selected_model.trace('w', mettre_a_jour_modeles)
+
+    def mettre_a_jour_placeholders(*args):
+        """Met à jour tous les placeholders quand le provider change"""
+        provider = selected_model.get().lower()
+        if provider:
+            template_id = f"{provider}_chat"
+            valeurs_defaut = extraire_valeurs_par_defaut_du_template(template_id)
+            if valeurs_defaut:
+                if "placeholder_model" in valeurs_defaut:
+                    placeholder_model_var.set(valeurs_defaut["placeholder_model"])
+                if "placeholder_user_prompt" in valeurs_defaut:
+                    api_url_var.set(valeurs_defaut["placeholder_user_prompt"])
+                if "placeholder_role" in valeurs_defaut:
+                    placeholder_role_var.set(valeurs_defaut["placeholder_role"])
+                if "placeholder_behavior" in valeurs_defaut:
+                    placeholder_behavior_var.set(valeurs_defaut["placeholder_behavior"])
+                if "placeholder_api_key" in valeurs_defaut:
+                    replace_apikey_var.set(valeurs_defaut["placeholder_api_key"])
+    
+    # Bind pour mise à jour automatique des placeholders quand provider change
+    selected_model.trace('w', mettre_a_jour_placeholders)
 
     def extraire_modele_du_template(template_content: str, provider: str) -> str:
         """Extrait le modèle du template curl pour compatibilité"""
@@ -1515,58 +1539,387 @@ def open_setup_menu():
         
         return ""
 
+    def extraire_valeurs_par_defaut_du_template(template_id: str) -> dict:
+        """
+        ÉTAPE 1: Extraction correcte basée sur la directive v2
+        1. Lit curl_basic.txt pour identifier les placeholders (structure du formulaire)
+        2. Lit curl.txt pour extraire les valeurs par défaut correspondantes
+        """
+        try:
+            # Construire les chemins vers les deux fichiers template
+            provider = template_id.split('_')[0]
+            template_type = template_id.split('_')[1]
+            basic_template_path = f"templates/{template_type}/{provider}/curl_basic.txt"
+            concrete_template_path = f"templates/{template_type}/{provider}/curl.txt"
+            
+            import os
+            import re
+            
+            # ÉTAPE 1A: Lire curl_basic.txt pour identifier les placeholders
+            basic_full_path = os.path.join(".", basic_template_path)
+            if not os.path.exists(basic_full_path):
+                print(f"Template basic introuvable : {basic_full_path}")
+                return {}
+                
+            with open(basic_full_path, 'r', encoding='utf-8') as f:
+                basic_content = f.read()
+            
+            # Identifier tous les placeholders dans curl_basic.txt
+            placeholders_found = re.findall(r'\{\{([^}]+)\}\}', basic_content)
+            print(f"[DEBUG] Placeholders trouvés dans {template_id}: {placeholders_found}")
+            
+            # ÉTAPE 1B: Lire curl.txt pour extraire les valeurs par défaut
+            concrete_full_path = os.path.join(".", concrete_template_path)
+            if not os.path.exists(concrete_full_path):
+                print(f"Template concret introuvable : {concrete_full_path}")
+                return {}
+                
+            with open(concrete_full_path, 'r', encoding='utf-8') as f:
+                concrete_content = f.read()
+            
+            valeurs_defaut = {}
+            
+            # ÉTAPE 1C: Pour chaque placeholder trouvé, extraire sa valeur du fichier concret
+            for placeholder in placeholders_found:
+                if placeholder == "API_KEY":
+                    # Extraire la clé API
+                    api_key_patterns = [
+                        r'Bearer \$([A-Z_]+)',        # OpenAI/Claude/Mistral: Bearer $OPENAI_API_KEY
+                        r'x-goog-api-key: \$([A-Z_]+)',  # Gemini: x-goog-api-key: $GEMINI_API_KEY
+                        r'x-api-key: \$([A-Z_]+)',    # Claude: x-api-key: $CLAUDE_API_KEY
+                    ]
+                    for pattern in api_key_patterns:
+                        match = re.search(pattern, concrete_content)
+                        if match:
+                            valeurs_defaut["placeholder_api_key"] = f"${match.group(1)}"
+                            break
+                
+                elif placeholder == "LLM_MODEL":
+                    # Extraire le modèle LLM
+                    model_patterns = [
+                        r'"model":\s*"([^"]+)"',  # OpenAI/Claude/Mistral: "model": "gpt-5"
+                        r'models/([^:?&\s/]+)',   # Gemini: models/gemini-2.5-flash
+                    ]
+                    for pattern in model_patterns:
+                        match = re.search(pattern, concrete_content)
+                        if match:
+                            valeurs_defaut["placeholder_model"] = match.group(1)
+                            break
+                
+                elif placeholder == "USER_PROMPT":
+                    # Extraire le prompt utilisateur avec gestion spécifique par provider
+                    provider = template_id.split('_')[0]
+                    
+                    if provider == "claude":
+                        # Claude: structure complexe avec content array et "text" field
+                        text_pattern = r'"text":\s*"([^"]+)"'
+                        matches = re.findall(text_pattern, concrete_content, re.DOTALL)
+                        if matches:
+                            valeurs_defaut["placeholder_user_prompt"] = matches[-1]  # Dernier text trouvé
+                    
+                    elif provider in ["kimi", "qwen"]:
+                        # Kimi/Qwen: Prendre le PREMIER message user, pas l'assistant
+                        user_msg_pattern = r'"role":\s*"user"[^}]*"content":\s*"([^"]+)"'
+                        match = re.search(user_msg_pattern, concrete_content, re.DOTALL)
+                        if match:
+                            valeurs_defaut["placeholder_user_prompt"] = match.group(1)
+                    
+                    else:
+                        # Autres providers: patterns standards
+                        user_prompt_patterns = [
+                            (r'"input":\s*"([^"]+)"', 1),  # OpenAI: "input": "prompt"
+                            (r'"contents":\s*\[.*?"text":\s*"([^"]+)"', 1),  # Gemini contents (2ème text)
+                            (r'"content":\s*"([^"]+)"', -1),  # Mistral: dernier "content"
+                            (r'"messages":\s*\[.*?"content":\s*"([^"]+)"', -1),  # OpenRouter: dernier message content
+                        ]
+                        for pattern, index in user_prompt_patterns:
+                            if index == -1:  # Prendre le dernier match
+                                matches = re.findall(pattern, concrete_content, re.DOTALL)
+                                if matches:
+                                    valeurs_defaut["placeholder_user_prompt"] = matches[-1]
+                                    break
+                            else:  # Prendre le match à l'index donné
+                                matches = re.findall(pattern, concrete_content, re.DOTALL)
+                                if len(matches) >= index:
+                                    valeurs_defaut["placeholder_user_prompt"] = matches[index-1]
+                                    break
+                
+                elif placeholder == "SYSTEM_PROMPT_ROLE":
+                    # Extraire le rôle système avec gestion spécifique par provider
+                    provider = template_id.split('_')[0]
+                    
+                    if provider == "claude":
+                        # Claude: "system": "Assistant, spécialisé en code moderne"
+                        system_pattern = r'"system":\s*"([^"]+)"'
+                        match = re.search(system_pattern, concrete_content)
+                        if match:
+                            system_text = match.group(1)
+                            # Séparer rôle et comportement par virgule
+                            if ',' in system_text:
+                                parts = system_text.split(',', 1)
+                                valeurs_defaut["placeholder_role"] = parts[0].strip()
+                                if "SYSTEM_PROMPT_BEHAVIOR" in placeholders_found:
+                                    valeurs_defaut["placeholder_behavior"] = parts[1].strip()
+                            else:
+                                valeurs_defaut["placeholder_role"] = system_text
+                    
+                    elif provider in ["kimi", "qwen"]:
+                        # Kimi/Qwen: prendre le message assistant content
+                        assistant_pattern = r'"role":\s*["\']assistant["\'][^}]*"content":\s*"([^"]+)"'
+                        match = re.search(assistant_pattern, concrete_content, re.DOTALL)
+                        if match:
+                            assistant_text = match.group(1)
+                            # Si pas de virgule, tout va dans role
+                            if ',' in assistant_text:
+                                parts = assistant_text.split(',', 1)
+                                valeurs_defaut["placeholder_role"] = parts[0].strip()
+                                if "SYSTEM_PROMPT_BEHAVIOR" in placeholders_found:
+                                    valeurs_defaut["placeholder_behavior"] = parts[1].strip()
+                            else:
+                                valeurs_defaut["placeholder_role"] = assistant_text
+                    
+                    else:
+                        # Autres providers: patterns standards
+                        system_prompt_patterns = [
+                            r'"instructions":\s*"([^"]+)"',  # OpenAI: "instructions": "system"
+                            r'"system_instruction".*?"text":\s*"([^"]+)"',  # Gemini system_instruction
+                            r'"role":\s*"system"[^}]*"content":\s*"([^"]+)"',  # Messages avec role system
+                        ]
+                        system_text = None
+                        for pattern in system_prompt_patterns:
+                            match = re.search(pattern, concrete_content, re.DOTALL)
+                            if match:
+                                system_text = match.group(1)
+                                break
+                        
+                        if system_text:
+                            # Séparer rôle et comportement si possible
+                            if ',' in system_text:  # "Talk like a pirate, be funny"
+                                parts = system_text.split(',', 1)
+                                valeurs_defaut["placeholder_role"] = parts[0].strip()
+                                if "SYSTEM_PROMPT_BEHAVIOR" in placeholders_found:
+                                    valeurs_defaut["placeholder_behavior"] = parts[1].strip()
+                            elif '. ' in system_text:  # "You are a cat. Your name is Neko."
+                                parts = system_text.split('. ', 1)
+                                valeurs_defaut["placeholder_role"] = parts[0].strip()
+                                if "SYSTEM_PROMPT_BEHAVIOR" in placeholders_found and len(parts) > 1:
+                                    behavior = parts[1].strip()
+                                    if behavior.endswith('.'):
+                                        behavior = behavior[:-1]
+                                    valeurs_defaut["placeholder_behavior"] = behavior
+                            else:
+                                # Pas de séparation évidente, tout va dans le rôle
+                                valeurs_defaut["placeholder_role"] = system_text
+                
+                elif placeholder == "SYSTEM_PROMPT_BEHAVIOR":
+                    # Géré dans SYSTEM_PROMPT_ROLE si les deux existent
+                    pass
+            
+            print(f"[DEBUG] Valeurs extraites pour {template_id}: {valeurs_defaut}")
+            return valeurs_defaut
+            
+        except Exception as e:
+            print(f"Erreur lors de l'extraction des valeurs par défaut: {e}")
+            return {}
+
+    def creer_champs_dynamiques(placeholders_found: list, valeurs_defaut: dict):
+        """
+        LOGIQUE SIMPLE ET SOLID: 
+        1. VIDER et MASQUER tous les champs
+        2. AFFICHER et PRÉREMPLIR seulement les champs nécessaires
+        """
+        print(f"[DEBUG] Création champs dynamiques pour placeholders: {placeholders_found}")
+        
+        # Dictionnaire de mapping des champs existants
+        champs_mapping = {
+            "LLM_MODEL": {
+                "label": placeholder_model_label,
+                "entry": placeholder_model_entry,
+                "var": placeholder_model_var,
+                "row": 4,
+                "text": "Placeholder Modèle LLM :",
+                "value_key": "placeholder_model"
+            },
+            "SYSTEM_PROMPT_ROLE": {
+                "label": placeholder_role_label, 
+                "entry": placeholder_role_entry,
+                "var": placeholder_role_var,
+                "row": 6,
+                "text": "Placeholder Rôle :",
+                "value_key": "placeholder_role"
+            },
+            "SYSTEM_PROMPT_BEHAVIOR": {
+                "label": placeholder_behavior_label,
+                "entry": placeholder_behavior_entry, 
+                "var": placeholder_behavior_var,
+                "row": 8,
+                "text": "Placeholder Comportement :",
+                "value_key": "placeholder_behavior"
+            },
+            "USER_PROMPT": {
+                "label": api_url_label,
+                "entry": api_url_entry,
+                "var": api_url_var,
+                "row": 9,
+                "text": "Placeholder User Prompt :",
+                "value_key": "placeholder_user_prompt"
+            },
+            "API_KEY": {
+                "label": replace_apikey_label,
+                "entry": replace_apikey_entry,
+                "var": replace_apikey_var,
+                "row": 11,
+                "text": "Placeholder Clé API :",
+                "value_key": "placeholder_api_key"
+            }
+        }
+        
+        # ÉTAPE 1: VIDER et MASQUER TOUS LES CHAMPS (reset complet)
+        print("[DEBUG] ÉTAPE 1: Reset complet de tous les champs")
+        for placeholder, config in champs_mapping.items():
+            try:
+                # Vider le champ
+                config["var"].set("")
+                # Masquer le champ
+                config["label"].grid_remove()
+                config["entry"].grid_remove()
+                print(f"[DEBUG] Champ {placeholder} vidé et masqué")
+            except Exception as e:
+                print(f"[DEBUG] Erreur reset {placeholder}: {e}")
+        
+        # ÉTAPE 2: AFFICHER et PRÉREMPLIR seulement les champs nécessaires
+        print(f"[DEBUG] ÉTAPE 2: Affichage des champs nécessaires: {placeholders_found}")
+        for placeholder in placeholders_found:
+            if placeholder in champs_mapping:
+                config = champs_mapping[placeholder]
+                
+                print(f"[DEBUG] Traitement champ {placeholder}")
+                
+                # Afficher le champ
+                config["label"].grid(row=config["row"], column=0, sticky="w", pady=3, padx=(10,5))
+                config["entry"].grid(row=config["row"], column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+                
+                # Forcer le bon texte du label
+                config["label"].config(text=config["text"])
+                
+                # Préremplir avec la valeur par défaut (ou vide si pas de valeur)
+                if config["value_key"] in valeurs_defaut:
+                    config["var"].set(valeurs_defaut[config["value_key"]])
+                    print(f"[DEBUG] Champ {placeholder} prérempli avec: {valeurs_defaut[config['value_key']]}")
+                else:
+                    config["var"].set("")  # Assurer que c'est vide
+                    print(f"[DEBUG] Champ {placeholder} laissé vide (pas de valeur)")
+        
+        print(f"[DEBUG] Reset et création dynamique terminés")
+
+    def update_form_with_llm_data(template_id: str):
+        """
+        ÉTAPE 2: Orchestration complète du processus
+        1. Extrait les placeholders et valeurs du template
+        2. Crée les champs dynamiques correspondants
+        3. Prérempli les champs avec les valeurs par défaut
+        """
+        print(f"[DEBUG] Mise à jour formulaire pour template: {template_id}")
+        
+        # Étape 1: Extraction des données
+        valeurs_defaut = extraire_valeurs_par_defaut_du_template(template_id)
+        
+        # Déterminer les placeholders présents (depuis curl_basic.txt)
+        provider = template_id.split('_')[0]
+        template_type = template_id.split('_')[1]
+        basic_template_path = f"templates/{template_type}/{provider}/curl_basic.txt"
+        
+        import os
+        import re
+        placeholders_found = []
+        
+        basic_full_path = os.path.join(".", basic_template_path)
+        if os.path.exists(basic_full_path):
+            with open(basic_full_path, 'r', encoding='utf-8') as f:
+                basic_content = f.read()
+            placeholders_found = re.findall(r'\{\{([^}]+)\}\}', basic_content)
+        
+        print(f"[DEBUG] Orchestration: placeholders={placeholders_found}, valeurs={valeurs_defaut}")
+        
+        # Étape 2: Création et configuration dynamique des champs
+        creer_champs_dynamiques(placeholders_found, valeurs_defaut)
+        
+        return valeurs_defaut
+
+    # Placeholder Modèle LLM
+    placeholder_model_label = ttk.Label(scrollable_frame, text="Placeholder Modèle LLM :")
+    placeholder_model_label.grid(row=4, column=0, sticky="w", pady=3, padx=(10,5))
+    placeholder_model_var = tk.StringVar(value="")
+    placeholder_model_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_model_var)
+    placeholder_model_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+
+    # Champs pour les placeholders - CORRECTION ARCHITECTE
     # Champ Rôle
     role_label = ttk.Label(scrollable_frame, text="Rôle :")
-    role_label.grid(row=4, column=0, sticky="w", pady=3, padx=(10,5))
+    role_label.grid(row=5, column=0, sticky="w", pady=3, padx=(10,5))
     role_var = tk.StringVar(value="")
     role_entry = ttk.Entry(scrollable_frame, textvariable=role_var)
-    role_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    role_entry.grid(row=5, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+
+    # Placeholder Rôle
+    placeholder_role_label = ttk.Label(scrollable_frame, text="Placeholder Rôle :")
+    placeholder_role_label.grid(row=6, column=0, sticky="w", pady=3, padx=(10,5))
+    placeholder_role_var = tk.StringVar(value="")
+    placeholder_role_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_role_var)
+    placeholder_role_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Comportement Enregistré
     default_behavior_label = ttk.Label(scrollable_frame, text="Comportement par Défaut :")
-    default_behavior_label.grid(row=5, column=0, sticky="w", pady=3, padx=(10,5))
+    default_behavior_label.grid(row=7, column=0, sticky="w", pady=3, padx=(10,5))
     default_behavior_var = tk.StringVar(value="")
     default_behavior_entry = ttk.Entry(scrollable_frame, textvariable=default_behavior_var)
-    default_behavior_entry.grid(row=5, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    default_behavior_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
-    # Texte à remplacer
-    api_url_label = ttk.Label(scrollable_frame, text="Texte à remplacer :")
-    api_url_label.grid(row=6, column=0, sticky="w", pady=3, padx=(10,5))
+    # Placeholder Comportement
+    placeholder_behavior_label = ttk.Label(scrollable_frame, text="Placeholder Comportement :")
+    placeholder_behavior_label.grid(row=8, column=0, sticky="w", pady=3, padx=(10,5))
+    placeholder_behavior_var = tk.StringVar(value="")
+    placeholder_behavior_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_behavior_var)
+    placeholder_behavior_entry.grid(row=8, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+
+    # Placeholder User Prompt
+    api_url_label = ttk.Label(scrollable_frame, text="Placeholder User Prompt :")
+    api_url_label.grid(row=9, column=0, sticky="w", pady=3, padx=(10,5))
     api_url_var = tk.StringVar(value="")
     api_url_entry = ttk.Entry(scrollable_frame, textvariable=api_url_var, width=50)
-    api_url_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    api_url_entry.grid(row=9, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Clé API
     api_key_label = ttk.Label(scrollable_frame, text="Clé API :")
-    api_key_label.grid(row=7, column=0, sticky="w", pady=3, padx=(10,5))
+    api_key_label.grid(row=10, column=0, sticky="w", pady=3, padx=(10,5))
     api_key_var = tk.StringVar(value="")
     api_key_entry = ttk.Entry(scrollable_frame, textvariable=api_key_var, show="*")
-    api_key_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    api_key_entry.grid(row=10, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+
+    # Placeholder Clé API - DIRECTEMENT SOUS CLÉ API
+    replace_apikey_label = ttk.Label(scrollable_frame, text="Placeholder Clé API :")
+    replace_apikey_label.grid(row=11, column=0, sticky="w", pady=3, padx=(10,5))
+    replace_apikey_var = tk.StringVar(value="")
+    replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var)
+    replace_apikey_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Historique
     history_checkbutton_var = tk.BooleanVar(value=False)
     history_checkbutton = ttk.Checkbutton(scrollable_frame, text="Historique", variable=history_checkbutton_var)
-    history_checkbutton.grid(row=8, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
+    history_checkbutton.grid(row=12, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
 
     # Case à cocher pour définir le profil par défaut
     default_profile_var = tk.BooleanVar(value=False)
     default_profile_checkbutton = ttk.Checkbutton(scrollable_frame, text="Défaut", variable=default_profile_var)
-    default_profile_checkbutton.grid(row=9, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
-
-    # Champ replace_apikey
-    replace_apikey_label = ttk.Label(scrollable_frame, text="Remplacer API Key :")
-    replace_apikey_label.grid(row=10, column=0, sticky="w", pady=3, padx=(10,5))
-    replace_apikey_var = tk.StringVar(value="")
-    replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var)
-    replace_apikey_entry.grid(row=10, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    default_profile_checkbutton.grid(row=13, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
 
     # Commande curl - Textarea multi-lignes
     curl_exe_label = ttk.Label(scrollable_frame, text="Commande curl :")
-    curl_exe_label.grid(row=11, column=0, sticky="nw", pady=3, padx=(10,5))
+    curl_exe_label.grid(row=14, column=0, sticky="nw", pady=3, padx=(10,5))
     
     # Frame pour le textarea avec scrollbar
     curl_frame = ttk.Frame(scrollable_frame)
-    curl_frame.grid(row=11, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
     curl_frame.grid_columnconfigure(0, weight=1)
     
     # Textarea avec scrollbar verticale
@@ -1603,13 +1956,19 @@ def open_setup_menu():
     profil_defaut = charger_profil_defaut()
     if profil_defaut:
         donnees_profil = charger_donnees_profil(profil_defaut)
-        api_url_var.set(donnees_profil.get("api_url", ""))
+        # NE PAS charger api_url - sera géré par les placeholders template
+        # api_url_var.set(donnees_profil.get("api_url", ""))  # COMMENTÉ: cause confusion URL/USER_PROMPT
         api_key_var.set(donnees_profil.get("api_key", ""))
         role_var.set(donnees_profil.get("role", ""))
         default_behavior_var.set(donnees_profil.get("behavior", ""))
         history_checkbutton_var.set(donnees_profil.get("history", False))
         default_profile_var.set(donnees_profil.get("default", False))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
+        
+        # Charger les nouveaux champs placeholder
+        placeholder_model_var.set(donnees_profil.get("placeholder_model", ""))
+        placeholder_role_var.set(donnees_profil.get("placeholder_role", ""))
+        placeholder_behavior_var.set(donnees_profil.get("placeholder_behavior", ""))
         
         # Charger le template curl au lieu de curl_exe via APIManager
         template_id = donnees_profil.get("template_id", "")
@@ -1620,6 +1979,22 @@ def open_setup_menu():
         else:
             # Fallback vers curl_exe pour compatibilité
             curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+        
+        # Si les placeholders sont vides, essayer de les remplir avec les valeurs par défaut du template
+        if template_id:
+            valeurs_defaut = extraire_valeurs_par_defaut_du_template(template_id)
+            if valeurs_defaut:
+                # Toujours remplir avec les valeurs par défaut si elles existent
+                if "placeholder_model" in valeurs_defaut:
+                    placeholder_model_var.set(valeurs_defaut["placeholder_model"])
+                if "placeholder_user_prompt" in valeurs_defaut:
+                    api_url_var.set(valeurs_defaut["placeholder_user_prompt"])
+                if "placeholder_role" in valeurs_defaut:
+                    placeholder_role_var.set(valeurs_defaut["placeholder_role"])
+                if "placeholder_behavior" in valeurs_defaut:
+                    placeholder_behavior_var.set(valeurs_defaut["placeholder_behavior"])
+                if "placeholder_api_key" in valeurs_defaut:
+                    replace_apikey_var.set(valeurs_defaut["placeholder_api_key"])
         
         # Charger méthode et type template (nouveaux champs V2)
         selected_method.set(donnees_profil.get("method", "curl"))
@@ -1675,10 +2050,13 @@ def open_setup_menu():
             "api_url": api_url_entry.get(),
             "api_key": api_key_entry.get().strip(),
             "role": role_entry.get(),
-            "behavior": default_behavior_var.get(),
+            "behavior": default_behavior_entry.get(),
             "history": history_checkbutton_var.get(),
             "default": default_profile_var.get(),
             "replace_apikey": replace_apikey_var.get(),
+            "placeholder_model": placeholder_model_var.get(),
+            "placeholder_role": placeholder_role_var.get(),
+            "placeholder_behavior": placeholder_behavior_var.get(),
             "template_id": f"{profil_selectionne.lower()}_chat",
             "method": selected_method.get(),  # Nouveau champ V2
             "template_type": selected_template_type.get(),  # Nouveau champ V2
@@ -1743,7 +2121,7 @@ def open_setup_menu():
 
     # Frame pour disposer les boutons côte à côte
     boutons_frame = ttk.Frame(scrollable_frame)
-    boutons_frame.grid(row=12, column=0, columnspan=3, pady=(20,40), padx=(10,10))
+    boutons_frame.grid(row=15, column=0, columnspan=3, pady=(20,40), padx=(10,10))
     
     bouton_enregistrer = ttk.Button(boutons_frame, text="Enregistrer", command=enregistrer_configuration)
     bouton_enregistrer.pack(side="left", padx=(0, 10))
@@ -1760,7 +2138,8 @@ def open_setup_menu():
         profil_selectionne = selected_model.get()
         donnees_profil = charger_donnees_profil(profil_selectionne)
         
-        api_url_var.set(donnees_profil.get("api_url", ""))
+        # NE PAS charger api_url - sera géré par les placeholders template  
+        # api_url_var.set(donnees_profil.get("api_url", ""))  # COMMENTÉ: cause confusion URL/USER_PROMPT
         api_key_var.set(donnees_profil.get("api_key", ""))
         role_var.set(donnees_profil.get("role", ""))
         default_behavior_var.set(donnees_profil.get("behavior", ""))
@@ -1789,6 +2168,15 @@ def open_setup_menu():
             print(f"[DEBUG] Pas de template_id, utilisation de curl_exe: {len(fallback_curl)} caractères")
         
         print(f"[DEBUG] Profil par défaut chargé avec succès: {profil_selectionne}")
+        
+        # INITIALISATION DES PLACEHOLDERS - Force l'extraction dès l'ouverture
+        if template_id:
+            print(f"[DEBUG] Initialisation des placeholders pour template: {template_id}")
+            update_form_with_llm_data(template_id)
+        else:
+            # Template par défaut Gemini si aucun trouvé
+            print(f"[DEBUG] Pas de template_id, initialisation Gemini par défaut")
+            update_form_with_llm_data("gemini_chat")
     except Exception as e:
         print(f"[DEBUG] Erreur lors du chargement initial du profil par défaut Setup API: {e}")
         # Valeurs par défaut de sécurité
@@ -2084,6 +2472,35 @@ def open_setup_history_menu():
     profil_defaut = api_manager.get_default_profile()
     template_initial = f"Template {profil_defaut.get('name', 'Gemini')}" if profil_defaut else "Template Gemini"
     template_var = tk.StringVar(value=template_initial)
+    
+    # FONCTION DE CHANGEMENT DE TEMPLATE - DANS LE BON SCOPE
+    def on_template_change_setup(*args):
+        """Fonction appelée quand le template change dans Setup API - met à jour le formulaire dynamiquement"""
+        template_name = template_var.get()
+        print(f"[DEBUG] Changement template Setup API: {template_name}")
+        
+        # Extraire le template_id depuis le nom affiché
+        if "Template " in template_name:
+            profile_name = template_name.replace("Template ", "")
+            
+            # MAPPING DYNAMIQUE - Auto-détection des templates disponibles
+            # Plus de mapping hardcodé - système SOLID qui s'adapte automatiquement
+            try:
+                # Essayer de charger le profil pour récupérer son template_id
+                profile_data = api_manager.load_profile(profile_name)
+                if profile_data and 'template_id' in profile_data:
+                    template_id = profile_data['template_id']
+                    print(f"[DEBUG] Template Setup auto-détecté: {profile_name} -> {template_id}")
+                else:
+                    # Fallback: construire template_id par convention {provider}_chat
+                    template_id = f"{profile_name.lower()}_chat"
+                    print(f"[DEBUG] Template Setup fallback: {profile_name} -> {template_id}")
+            except Exception as e:
+                print(f"[DEBUG] Erreur détection template pour {profile_name}: {e}")
+                template_id = "gemini_chat"  # Fallback de sécurité
+            
+            # ORCHESTRATION COMPLÈTE avec mise à jour dynamique dans le bon scope
+            update_form_with_llm_data(template_id)
     
     auto_save_var = tk.BooleanVar(value=True)
     
@@ -2457,13 +2874,38 @@ def open_setup_history_menu():
     
     # === FONCTIONS D'UPDATE ===
     def on_template_change(*args):
-        """Fonction appelée quand le template change - charge la config et met à jour le preview"""
+        """Fonction appelée quand le template change - charge la config et met à jour le formulaire dynamiquement"""
+        template_name = template_var.get()
+        
+        # Extraire le template_id depuis le nom affiché
+        if "Template " in template_name:
+            profile_name = template_name.replace("Template ", "")
+            
+            # MAPPING DYNAMIQUE - Auto-détection des templates disponibles
+            # Plus de mapping hardcodé - système SOLID qui s'adapte automatiquement
+            try:
+                # Essayer de charger le profil pour récupérer son template_id
+                profile_data = api_manager.load_profile(profile_name)
+                if profile_data and 'template_id' in profile_data:
+                    template_id = profile_data['template_id']
+                    print(f"[DEBUG] Template History auto-détecté: {profile_name} -> {template_id}")
+                else:
+                    # Fallback: construire template_id par convention {provider}_chat
+                    template_id = f"{profile_name.lower()}_chat"
+                    print(f"[DEBUG] Template History fallback: {profile_name} -> {template_id}")
+            except Exception as e:
+                print(f"[DEBUG] Erreur détection template pour {profile_name}: {e}")
+                template_id = "gemini_chat"  # Fallback de sécurité
+            
+            # Pas de mise à jour des placeholders ici - cette fonction concerne l'historique, pas Setup API
+        
+        # Garder les fonctions originales
         update_template_preview()
         load_current_config()
     
     # === INITIALISATION ===
     # Connecter les événements
-    template_var.trace_add("write", on_template_change)
+    template_var.trace_add("write", on_template_change_setup)
     
     # Initialiser l'affichage du profil et définir le template par défaut
     update_profile_display()  

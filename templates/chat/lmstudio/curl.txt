@@ -1,0 +1,11 @@
+curl http://localhost:1234/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-3-1b",
+    "messages": [
+      {"role": "system", "content": "Tu es un expert,  architecte et développeur."},
+      {"role": "user", "content": "Écris un script simple pour calculer la factorielle d'un nombre."}
+    ],
+    "temperature": 0.5,
+    "max_tokens": 200
+  }'

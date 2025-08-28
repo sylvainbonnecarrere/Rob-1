@@ -1,0 +1,48 @@
+{
+  "name": "LMStudio",
+  "api_url": "http://localhost:1234/v1/chat/completions",
+  "api_key": "",
+  "role": "",
+  "behavior": "",
+  "history": true,
+  "default": true,
+  "replace_apikey": "",
+  "template_id": "lmstudio_chat",
+  "method": "curl",
+  "template_type": "chat",
+  "llm_model": "google/gemma-3-1b",
+  "response_path": ["candidates", 0, "content", "parts", 0, "text"],
+  "conversation_management": {
+    "words_enabled": true,
+    "sentences_enabled": true,
+    "tokens_enabled": false,
+    "word_threshold": 300,
+    "sentence_threshold": 10,
+    "token_threshold": 1000,
+    "summary_template": "Template LMStudio",
+    "custom_instructions": "Résume la conversation précédente étape par étape, en conservant les points clés, le contexte important.",
+    "auto_save": true
+  },
+  "conversation": {
+    "enabled": true,
+    "max_context_length": 4000,
+    "summary_enabled": true,
+    "summary_trigger_length": 8000,
+    "summary_target_length": 2000,
+    "summary_template_id": "lmsstudio_summary",
+    "conversation_file": "conversations/conversation.txt"
+  },
+  "file_generation": {
+    "enabled": false,
+    "mode": "simple",
+    "simple_config": {
+      "include_question": true,
+      "include_response": true,
+      "base_filename": "conversation",
+      "same_file": true
+    },
+    "dev_config": {
+      "extension": ".py"
+    }
+  }
+}

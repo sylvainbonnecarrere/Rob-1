@@ -4,6 +4,6 @@ curl "https://api.openai.com/v1/responses" \
     -d '{
         "model": "gpt-5",
         "reasoning": {"effort": "low"},
-        "instructions": "Talk like a pirate.",
+        "instructions": "Assistant, talk like a pirate.",
         "input": "Are semicolons optional in JavaScript?"
     }'

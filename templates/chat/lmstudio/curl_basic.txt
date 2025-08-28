@@ -1,0 +1,11 @@
+curl http://localhost:1234/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "{{LLM_MODEL}}",
+    "messages": [
+      {"role": "system", "content": "{{SYSTEM_PROMPT_ROLE}},  {{SYSTEM_PROMPT_BEHAVIOR}}"},
+      {"role": "user", "content": "{{USER_PROMPT}}"}
+    ],
+    "temperature": 0.5,
+    "max_tokens": 200
+  }'
