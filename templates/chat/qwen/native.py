@@ -2,7 +2,7 @@ from openai import OpenAI
 
 client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
-  api_key="{{API_KEY}}",
+  api_key="<OPENROUTER_API_KEY>",
 )
 
 completion = client.chat.completions.create(
@@ -11,15 +11,15 @@ completion = client.chat.completions.create(
     "X-Title": "<YOUR_SITE_NAME>", # Optional. Site title for rankings on openrouter.ai.
   },
   extra_body={},
-  model="{{LLM_MODEL}}",
+  model="qwen/qwen3-30b-a3b-instruct-2507",
   messages=[
     {
       "role": "user",
-      "content": "{{USER_PROMPT}}"
+      "content": "What is the meaning of life?"
     },
         { 
       "role": 'assistant', 
-      "content": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}" 
+      "content": "I'm not sure, but my best guess is" 
     }
   ]
 )

@@ -4,18 +4,18 @@ import json
 response = requests.post(
   url="https://openrouter.ai/api/v1/chat/completions",
   headers={
-    "Authorization": "Bearer {{API_KEY}}",
+    "Authorization": "Bearer <OPENROUTER_API_KEY>",
     "Content-Type": "application/json",  },
   data=json.dumps({
-    "model": "{{LLM_MODEL}}",
+    "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
     "messages": [
       {
           "role": "system",
-          "content": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}"
+          "content": "Assistant, spécialisé en code moderne."
       },
       {
         "role": "user",
-        "content": "{{USER_PROMPT}}"
+        "content": "What is the meaning of life?"
       }
     ],
     

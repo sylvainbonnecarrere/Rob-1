@@ -1430,15 +1430,148 @@ def open_setup_menu():
         default_profile_var.set(donnees_profil.get("default", False))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
         
-        # Charger le template curl au lieu de curl_exe via APIManager
+        # Charger le template intelligent selon la méthode du profil
         template_id = donnees_profil.get("template_id", "")
         if template_id:
-            # PHASE 3.1.2: Utiliser APIManager centralisé
-            template_content = api_manager.get_template_content(template_id)
-            curl_exe_var.set(template_content if template_content else "")
+            # Extraire provider et type du template_id
+            provider = template_id.split('_')[0] if '_' in template_id else profil.lower()
+            template_type = template_id.split('_')[1] if '_' in template_id and len(template_id.split('_')) > 1 else 'chat'
+            
+            # Utiliser notre système intelligent au lieu de l'APIManager direct
+            method = donnees_profil.get("method", "curl")
+            template_content = load_smart_template(provider, template_type, method, for_display=True)
+            # Note: load_smart_template appelle déjà curl_exe_var.set(), pas besoin de le refaire
         else:
             # Fallback vers curl_exe pour compatibilité
             curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+
+    # Fonction centralisée pour charger le bon template selon la méthode
+    def load_smart_template(provider, template_type="chat", method=None, for_display=True):
+        """
+        Fonction centralisée intelligente pour charger les templates
+        Remplace les appels directs à api_manager.get_template_content()
+        
+        Args:
+            provider: nom du provider (gemini, claude, etc.)
+            template_type: type de template (chat par défaut) 
+            method: méthode (curl/native). Si None, détecte automatiquement
+            for_display: True pour affichage interface, False pour exécution
+        
+        Returns:
+            str: contenu du template approprié
+        """
+        # Détection automatique de la méthode si non fournie
+        if method is None:
+            current_provider = selected_model.get().lower()
+            if current_provider == provider:
+                try:
+                    profile_data = charger_donnees_profil(provider.title())
+                    if profile_data:
+                        method = profile_data.get('method', 'curl')
+                        print(f"[DEBUG] load_smart_template: méthode détectée depuis profil {provider}: {method}")
+                    else:
+                        method = selected_method.get()
+                        print(f"[DEBUG] load_smart_template: profil {provider} non trouvé, utilisation selected_method: {method}")
+                except:
+                    method = selected_method.get()
+                    print(f"[DEBUG] load_smart_template: erreur détection profil {provider}, utilisation selected_method: {method}")
+            else:
+                method = 'curl'
+                print(f"[DEBUG] load_smart_template: provider différent, utilisation curl par défaut")
+        
+        print(f"[DEBUG] load_smart_template: {provider} {template_type} {method} (display={for_display})")
+        
+        if method == "native":
+            # Mode native : charger native.py
+            if for_display:
+                native_template_path = f"templates/{template_type}/{provider}/native.py"
+                if os.path.exists(native_template_path):
+                    try:
+                        with open(native_template_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        print(f"[DEBUG] Template native chargé: {native_template_path}")
+                        return content
+                    except Exception as e:
+                        print(f"[DEBUG] Erreur lecture native: {e}")
+                        return f"# Erreur lecture template native {native_template_path}\n# {e}"
+                else:
+                    # Template par défaut
+                    default_template = f"""#!/usr/bin/env python3
+# Template Python natif pour {provider.upper()}
+# Provider: {provider}
+
+import os
+
+# Configuration
+api_key = os.environ.get('{provider.upper()}_API_KEY')
+if not api_key:
+    print("ERROR: {provider.upper()}_API_KEY not found in environment")
+    exit(1)
+
+model = "{{{{LLM_MODEL}}}}"
+user_prompt = "{{{{USER_PROMPT}}}}"
+system_role = "{{{{SYSTEM_PROMPT_ROLE}}}}"
+system_behavior = "{{{{SYSTEM_PROMPT_BEHAVIOR}}}}"
+
+# TODO: Implémenter l'appel API pour {provider}
+print("Template native à implémenter pour {provider}")
+"""
+                    print(f"[DEBUG] Template native par défaut généré pour {provider}")
+                    return default_template
+            else:
+                # Pour exécution : charger native_basic.py
+                native_basic_path = f"templates/{template_type}/{provider}/native_basic.py"
+                if os.path.exists(native_basic_path):
+                    try:
+                        with open(native_basic_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        print(f"[DEBUG] Template native_basic chargé: {native_basic_path}")
+                        return content
+                    except Exception as e:
+                        print(f"[DEBUG] Erreur lecture native_basic: {e}")
+                        return f"# Erreur lecture template native_basic {native_basic_path}\n# {e}"
+                else:
+                    print(f"[DEBUG] Template native_basic non trouvé: {native_basic_path}")
+                    return f"# Template native_basic non trouvé pour {provider}"
+        else:
+            # Mode curl : utiliser APIManager
+            template_id = f"{provider}_{template_type}"
+            template_content = api_manager.get_template_content(template_id)
+            if template_content:
+                print(f"[DEBUG] Template curl chargé via APIManager: {template_id}")
+                return template_content
+            else:
+                print(f"[DEBUG] Template curl non trouvé: {template_id}")
+                return f"# Template curl non trouvé pour {provider}"
+
+    def load_template_by_method(provider, template_type="chat", method=None):
+        """
+        Charge le template approprié pour l'AFFICHAGE INTERFACE selon la méthode sélectionnée
+        WRAPPER simplifié autour de load_smart_template()
+        
+        Args:
+            provider: nom du provider (gemini, claude, etc.)
+            template_type: type de template (chat par défaut)
+            method: méthode explicite (curl/native). Si None, détecte automatiquement
+        """
+        content = load_smart_template(provider, template_type, method, for_display=True)
+        curl_exe_var.set(content)
+        return content
+
+    def get_execution_template(provider, method, template_type="chat"):
+        """
+        Obtient le template pour l'EXÉCUTION (avec placeholders _basic)
+        WRAPPER simplifié autour de load_smart_template()
+        
+        Args:
+            provider: nom du provider (gemini, claude, etc.)
+            method: méthode (curl ou native)
+            template_type: type de template (chat par défaut)
+        
+        Returns:
+            Contenu du template d'exécution avec placeholders
+        """
+        return load_smart_template(provider, template_type, method, for_display=False)
 
     # Fonction pour définir un seul profil comme défaut
     def definir_profil_defaut(profil_selectionne):
@@ -1473,7 +1606,7 @@ def open_setup_menu():
     method_label.grid(row=1, column=0, sticky="w", pady=3, padx=(10,5))
     selected_method = tk.StringVar(value="curl")
     method_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_method, 
-                                   values=["curl", "native (bientôt)"], state="readonly")
+                                   values=["curl", "native"], state="readonly")
     method_combobox.grid(row=1, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
     
     # Fonction pour mettre à jour l'affichage selon la méthode
@@ -1484,11 +1617,19 @@ def open_setup_menu():
             # NOTE: Le texte du label sera géré par creer_champs_dynamiques()
             curl_exe_label.grid(row=14, column=0, sticky="nw", pady=5, padx=(10,5))
             curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
-        elif method == "native (bientôt)":
-            # Mode native : masquer commande curl, changer le label
+            curl_exe_label.config(text="Commande Curl :")
+        elif method == "native":
+            # Mode native : afficher le template Python
             api_url_label.config(text="Paramètres template :")
-            curl_exe_label.grid_remove()
-            curl_frame.grid_remove()
+            curl_exe_label.grid(row=14, column=0, sticky="nw", pady=5, padx=(10,5))
+            curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+            curl_exe_label.config(text="Template Python Native :")
+        
+        # Recharger le template selon la nouvelle méthode (explicite)
+        current_provider = selected_model.get()
+        current_method = selected_method.get()
+        if current_provider and current_method:
+            load_template_by_method(current_provider.lower(), "chat", method=current_method)
     
     # Lier la fonction au changement de méthode
     selected_method.trace('w', update_method_fields)
@@ -1537,27 +1678,89 @@ def open_setup_menu():
         llm_model_combobox['values'] = models
         if models:
             selected_llm_model.set(models[0])  # Sélectionner le premier par défaut
+        
+        # IMPORTANT: Charger le template selon le provider et sa méthode
+        # Ceci assure que le changement de provider charge le bon template
+        print(f"[DEBUG] mettre_a_jour_modeles: provider changed to {provider}")
+        # Note: mettre_a_jour_placeholders() sera appelée après et gérera le profil complet
     
     # Bind pour mise à jour automatique des modèles
     selected_model.trace('w', mettre_a_jour_modeles)
 
     def mettre_a_jour_placeholders(*args):
-        """Met à jour tous les placeholders quand le provider change"""
+        """Met à jour tous les placeholders quand le provider change + charge le profil complet"""
+        # Petit délai pour éviter les conflits avec mettre_a_jour_modeles
+        import time
+        time.sleep(0.1)
+        
         provider = selected_model.get().lower()
         if provider:
-            template_id = f"{provider}_chat"
-            valeurs_defaut = extraire_valeurs_par_defaut_du_template(template_id)
-            if valeurs_defaut:
-                if "placeholder_model" in valeurs_defaut:
-                    placeholder_model_var.set(valeurs_defaut["placeholder_model"])
-                if "placeholder_user_prompt" in valeurs_defaut:
-                    api_url_var.set(valeurs_defaut["placeholder_user_prompt"])
-                if "placeholder_role" in valeurs_defaut:
-                    placeholder_role_var.set(valeurs_defaut["placeholder_role"])
-                if "placeholder_behavior" in valeurs_defaut:
-                    placeholder_behavior_var.set(valeurs_defaut["placeholder_behavior"])
-                if "placeholder_api_key" in valeurs_defaut:
-                    replace_apikey_var.set(valeurs_defaut["placeholder_api_key"])
+            print(f"[DEBUG] mettre_a_jour_placeholders: Changement de provider vers: {provider}")
+            
+            # 1. Charger le profil correspondant au nouveau provider
+            try:
+                # Chercher le profil correspondant (avec première lettre majuscule)
+                profil_name = provider.capitalize()
+                profil_data = charger_donnees_profil(profil_name)
+                
+                if profil_data:
+                    print(f"[DEBUG] Profil {profil_name} trouvé, chargement des données...")
+                    
+                    # 2. Mettre à jour la méthode selon le profil
+                    profile_method = profil_data.get('method', 'curl')
+                    print(f"[DEBUG] Méthode du profil {profil_name}: {profile_method}")
+                    print(f"[DEBUG] selected_method avant: {selected_method.get()}")
+                    selected_method.set(profile_method)
+                    print(f"[DEBUG] selected_method après: {selected_method.get()}")
+                    print(f"[DEBUG] Méthode mise à jour: {profile_method}")
+                    
+                    # 3. Charger les autres données du profil
+                    if "placeholder_model" in profil_data:
+                        placeholder_model_var.set(profil_data["placeholder_model"])
+                    if "placeholder_user_prompt" in profil_data:
+                        api_url_var.set(profil_data["placeholder_user_prompt"])
+                    if "placeholder_role" in profil_data:
+                        placeholder_role_var.set(profil_data["placeholder_role"])
+                    if "placeholder_behavior" in profil_data:
+                        placeholder_behavior_var.set(profil_data["placeholder_behavior"])
+                    if "placeholder_api_key" in profil_data:
+                        replace_apikey_var.set(profil_data["placeholder_api_key"])
+                    
+                    # 4. Charger le template selon la méthode du profil (explicite)
+                    load_template_by_method(provider, "chat", method=profile_method)
+                    print(f"[DEBUG] Template {profile_method} chargé pour {provider}")
+                    
+                    # 5. Forcer la mise à jour de l'interface (labels, champs)
+                    update_method_fields()
+                    print(f"[DEBUG] Interface mise à jour pour méthode {profile_method}")
+                    
+                else:
+                    print(f"[DEBUG] Aucun profil trouvé pour {profil_name}, utilisation des valeurs par défaut")
+                    # Fallback vers méthode curl et extraction depuis templates
+                    selected_method.set('curl')
+                    
+                    template_id = f"{provider}_chat"
+                    valeurs_defaut = extraire_valeurs_par_defaut_du_template(template_id)
+                    if valeurs_defaut:
+                        if "placeholder_model" in valeurs_defaut:
+                            placeholder_model_var.set(valeurs_defaut["placeholder_model"])
+                        if "placeholder_user_prompt" in valeurs_defaut:
+                            api_url_var.set(valeurs_defaut["placeholder_user_prompt"])
+                        if "placeholder_role" in valeurs_defaut:
+                            placeholder_role_var.set(valeurs_defaut["placeholder_role"])
+                        if "placeholder_behavior" in valeurs_defaut:
+                            placeholder_behavior_var.set(valeurs_defaut["placeholder_behavior"])
+                        if "placeholder_api_key" in valeurs_defaut:
+                            replace_apikey_var.set(valeurs_defaut["placeholder_api_key"])
+                    
+                    # Charger template curl par défaut
+                    load_template_by_method(provider, "chat")
+                    
+            except Exception as e:
+                print(f"[DEBUG] Erreur chargement profil {provider}: {e}")
+                # En cas d'erreur, revenir à curl par défaut
+                selected_method.set('curl')
+                load_template_by_method(provider, "chat")
     
     # Bind pour mise à jour automatique des placeholders quand provider change
     selected_model.trace('w', mettre_a_jour_placeholders)
@@ -1865,6 +2068,7 @@ def open_setup_menu():
         1. Extrait les placeholders et valeurs du template
         2. Crée les champs dynamiques correspondants
         3. Prérempli les champs avec les valeurs par défaut
+        4. Charge le contenu template selon la méthode (curl ou native)
         """
         print(f"[DEBUG] Mise à jour formulaire pour template: {template_id}")
         
@@ -1890,6 +2094,9 @@ def open_setup_menu():
         
         # Étape 2: Création et configuration dynamique des champs
         creer_champs_dynamiques(placeholders_found, valeurs_defaut)
+        
+        # Étape 3: Charger le contenu template selon la méthode (centralisé)
+        load_template_by_method(provider, template_type)
         
         return valeurs_defaut
 
@@ -2017,12 +2224,14 @@ def open_setup_menu():
         placeholder_role_var.set(donnees_profil.get("placeholder_role", ""))
         placeholder_behavior_var.set(donnees_profil.get("placeholder_behavior", ""))
         
-        # Charger le template curl au lieu de curl_exe via APIManager
+        # Charger le template selon la méthode sélectionnée
         template_id = donnees_profil.get("template_id", "")
         if template_id:
-            # PHASE 3.1.2: Utiliser APIManager centralisé
-            template_content = api_manager.get_template_content(template_id)
-            curl_exe_var.set(template_content if template_content else "")
+            # Extraire provider et type du template_id
+            provider = template_id.split('_')[0]
+            template_type = template_id.split('_')[1] if '_' in template_id else 'chat'
+            # Utiliser la fonction centralisée qui respecte la méthode
+            load_template_by_method(provider, template_type)
         else:
             # Fallback vers curl_exe pour compatibilité
             curl_exe_var.set(donnees_profil.get("curl_exe", ""))
@@ -2194,21 +2403,16 @@ def open_setup_menu():
         default_profile_var.set(donnees_profil.get("default", False))
         replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
         
-        # Charger le template curl via APIManager
+        # Charger le template selon la méthode sélectionnée
         template_id = donnees_profil.get("template_id", "")
         print(f"[DEBUG] Template ID trouvé: '{template_id}'")
         if template_id:
-            # PHASE 3.1.2: Utiliser APIManager centralisé
-            template_content = api_manager.get_template_content(template_id)
-            print(f"[DEBUG] Template content chargé: {len(template_content) if template_content else 0} caractères")
-            if template_content:
-                curl_exe_var.set(template_content)
-                print(f"[DEBUG] Template curl chargé avec succès pour {template_id}")
-            else:
-                # Fallback vers curl_exe si le template n'existe pas
-                fallback_curl = donnees_profil.get("curl_exe", "")
-                curl_exe_var.set(fallback_curl)
-                print(f"[DEBUG] Template vide, utilisation du fallback curl_exe: {len(fallback_curl)} caractères")
+            # Extraire provider et type du template_id
+            provider = template_id.split('_')[0]
+            template_type = template_id.split('_')[1] if '_' in template_id else 'chat'
+            # Utiliser la fonction centralisée qui respecte la méthode
+            load_template_by_method(provider, template_type)
+            print(f"[DEBUG] Template chargé avec load_template_by_method pour {template_id}")
         else:
             fallback_curl = donnees_profil.get("curl_exe", "")
             curl_exe_var.set(fallback_curl)

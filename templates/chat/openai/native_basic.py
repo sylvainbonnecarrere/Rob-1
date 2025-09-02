@@ -3,8 +3,8 @@ from openai import OpenAI
 client = OpenAI()
 
 response = client.responses.create(
-  model="gpt-4.1",
-  input="Tell me a three sentence bedtime story about a unicorn."
+  model="{{LLM_MODEL}}",
+  input="{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}. {{USER_PROMPT}} "
 )
 
 print(response)
