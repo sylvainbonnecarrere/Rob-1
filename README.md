@@ -1,6 +1,6 @@
 # Rob-1
 
-Ce projet a pour objectif une application permettant de de gérer plusieurs agents spécialisés. 
+Ce projet a pour objectif de créer une application permettant  de gérer plusieurs agents spécialisés. 
 
 L'application est indépendante et multi-plateforme : 
 - MacOS, Linux, Windows... 
