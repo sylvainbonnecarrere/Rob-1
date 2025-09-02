@@ -20,6 +20,12 @@ Ce projet applicatif vise à créer un système permettant de lancer et de gére
     
     Rôle : un architecte développeur d'applications - Comportement : utilise bonnes pratiques et design pattern, force de proposition 
 
+3.  Testez votre configuration d' agent. Allez sur Config>test API
+
+4.  Test de fonction de mémoire et d'historisation
+      Dans setup API, cochez la case historique et si vous souhaitez une configuration spéciale avec un seuil de mots ou tokens ou un comportement de résumé particulier, utilisez setup History.
+      Aller sur test API et lancer les conversations en API historisées.
+
 ## Lancement
 
 ### Méthode 1 : Lancement direct 
@@ -47,7 +53,7 @@ Double cliquez sur le lanceur précédemment créé
 ./run.sh
 ```
 
-### Méthode 3 : Regénérateur le lanceur
+### Méthode 3 : Regénérer le lanceur
 
 Si vous souhaitez recréer le lanceur, utilisez :
 

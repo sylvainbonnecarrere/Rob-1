@@ -17,6 +17,7 @@ from core.api_manager import ProfileManagerFactory
 from conversation_manager import ConversationManager
 from system_profile_generator import generate_system_profile_at_startup
 from payload_manager import PayloadManager, extract_json_from_curl
+from native_manager import NativeManager
 
 # Configure logging to log initialization events
 logging.basicConfig(
@@ -714,52 +715,98 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
         # 5. Exécuter l'appel API principal
         profil = charger_profil_api()
         
-        # PHASE 1: Utiliser le nouveau système PayloadManager
-        print("[DEBUG] === UTILISATION PHASE 1 - PAYLOAD MANAGER ===")
-        resultat_preparation = preparer_requete_curl(question_finale)
-        
-        # Vérifier si on a un fichier payload ou ancien système
-        if isinstance(resultat_preparation, tuple) and len(resultat_preparation) == 2:
-            # Nouveau système Phase 1 avec fichier payload
-            requete_curl, payload_file = resultat_preparation
-            print(f"[DEBUG] Phase 1 - Fichier payload: {payload_file}")
+        # DÉCISION: Méthode curl ou native
+        if method == 'native':
+            # ===== MODE NATIVE =====
+            print("[DEBUG] === UTILISATION MODE NATIVE ===")
+            
+            # Initialiser le NativeManager
+            native_manager = NativeManager()
+            
+            # Préparer les variables pour le template
+            variables = {
+                'USER_PROMPT': question_finale,
+                'LLM_MODEL': profil.get('model', ''),
+                'SYSTEM_PROMPT_ROLE': profil.get('system_prompt', {}).get('role', ''),
+                'SYSTEM_PROMPT_BEHAVIOR': profil.get('system_prompt', {}).get('behavior', '')
+            }
+            
+            # Récupérer le template Python depuis le profil
+            template_path = profil.get('native_template_path', '')
+            if not template_path or not os.path.exists(template_path):
+                raise FileNotFoundError(f"Template Python non trouvé: {template_path}")
+            
+            with open(template_path, 'r', encoding='utf-8') as f:
+                template_string = f.read()
+            
+            provider_name = profil.get('name', '').lower()
+            
+            # Exécuter en mode native
+            resultat_native = native_manager.execute_native_request(
+                template_string, variables, provider_name
+            )
+            
+            # Adapter le format de retour pour compatibilité avec le reste du code
+            class NativeResult:
+                def __init__(self, native_result):
+                    if native_result['status'] == 'success':
+                        self.returncode = 0
+                        self.stdout = native_result['output']
+                        self.stderr = ""
+                    else:
+                        self.returncode = 1
+                        self.stdout = ""
+                        self.stderr = native_result['errors']
+            
+            resultat = NativeResult(resultat_native)
+            
         else:
-            # Ancien système fallback
-            requete_curl = resultat_preparation
-            payload_file = None
-            print(f"[DEBUG] Fallback ancien système")
-        
-        # ÉTAPE 2 DEBUG : Journaliser la requête JSON finale
-        print("=" * 60)
-        print("🔍 ÉTAPE 2 - REQUÊTE CURL PHASE 1")
-        print("=" * 60)
-        print(f"Question finale (après échappement): {len(question_finale)} chars")
-        print(f"Requête curl: {len(requete_curl)} chars")
-        if payload_file:
-            print(f"Fichier payload: {payload_file}")
-        print("")
-        print("CONTENU question_finale:")
-        print(question_finale[:500] + "..." if len(question_finale) > 500 else question_finale)
-        print("")
-        print("REQUÊTE CURL COMPLÈTE:")
-        print(requete_curl)
-        print("=" * 60)
-        
-        # Exécuter avec le nouveau système qui gère automatiquement le nettoyage
-        resultat = executer_commande_curl(requete_curl, payload_file)
-        
-        # ÉTAPE 2 DEBUG : Journaliser la réponse brute
-        print("=" * 60)
-        print("🔍 RÉPONSE API BRUTE")
-        print("=" * 60)
-        print(f"Return code: {resultat.returncode}")
-        if resultat.returncode == 0:
-            print(f"Stdout length: {len(resultat.stdout)} chars")
-            print("RÉPONSE JSON BRUTE:")
-            print(resultat.stdout[:1000] + "..." if len(resultat.stdout) > 1000 else resultat.stdout)
-        else:
-            print(f"Stderr: {resultat.stderr}")
-        print("=" * 60)
+            # ===== MODE CURL (par défaut) =====
+            print("[DEBUG] === UTILISATION PHASE 1 - PAYLOAD MANAGER ===")
+            resultat_preparation = preparer_requete_curl(question_finale)
+            
+            # Vérifier si on a un fichier payload ou ancien système
+            if isinstance(resultat_preparation, tuple) and len(resultat_preparation) == 2:
+                # Nouveau système Phase 1 avec fichier payload
+                requete_curl, payload_file = resultat_preparation
+                print(f"[DEBUG] Phase 1 - Fichier payload: {payload_file}")
+            else:
+                # Ancien système fallback
+                requete_curl = resultat_preparation
+                payload_file = None
+                print(f"[DEBUG] Fallback ancien système")
+            
+            # ÉTAPE 2 DEBUG : Journaliser la requête JSON finale
+            print("=" * 60)
+            print("🔍 ÉTAPE 2 - REQUÊTE CURL PHASE 1")
+            print("=" * 60)
+            print(f"Question finale (après échappement): {len(question_finale)} chars")
+            print(f"Requête curl: {len(requete_curl)} chars")
+            if payload_file:
+                print(f"Fichier payload: {payload_file}")
+            print("")
+            print("CONTENU question_finale:")
+            print(question_finale[:500] + "..." if len(question_finale) > 500 else question_finale)
+            print("")
+            print("REQUÊTE CURL COMPLÈTE:")
+            print(requete_curl)
+            print("=" * 60)
+            
+            # Exécuter avec le nouveau système qui gère automatiquement le nettoyage
+            resultat = executer_commande_curl(requete_curl, payload_file)
+            
+            # ÉTAPE 2 DEBUG : Journaliser la réponse brute
+            print("=" * 60)
+            print("🔍 RÉPONSE API BRUTE")
+            print("=" * 60)
+            print(f"Return code: {resultat.returncode}")
+            if resultat.returncode == 0:
+                print(f"Stdout length: {len(resultat.stdout)} chars")
+                print("RÉPONSE JSON BRUTE:")
+                print(resultat.stdout[:1000] + "..." if len(resultat.stdout) > 1000 else resultat.stdout)
+            else:
+                print(f"Stderr: {resultat.stderr}")
+            print("=" * 60)
         
         # 6. Traiter la réponse
         if resultat.returncode == 0:
