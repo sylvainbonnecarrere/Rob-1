@@ -21,7 +21,7 @@ Choix large de LLM / SML et possibilité d'utilisation LLM Local et propriétair
 - sécurisation avec utilisation de SML/LLM sur un réseau ou un PC local (installation de LMStudio nécessaire, tutoriel à venir)
 - méthodes API en CURL ou Python natif
 
-  Cette application permet de se connecter sur différentes API LLM définies dans un fichier de configuration. Cette première version permet d'associer différents LLMs, de contourner de la contrainte stateless des api pour gérer un historique de conversations personnalisé, de faire des sauvegardes et de créer un environnement d'éxécution local et sécurisé.
+  Cette application permet de se connecter sur différentes API LLM définies dans un fichier de configuration. Cette première version permet d'associer différents LLMs, de contourner  la contrainte stateless des api pour gérer un historique de conversations personnalisé, de faire des sauvegardes, de créer un environnement d'éxécution local et sécurisé.
 
 ## Prérequis
 
