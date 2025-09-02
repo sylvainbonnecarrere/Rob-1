@@ -2,10 +2,11 @@
 
 Ce projet a pour objectif de créer une application permettant  de gérer plusieurs agents spécialisés. 
 
-L'application est indépendante et multi-plateforme : 
+L'application est indépendante et multi-plateformes : 
 - MacOS, Linux, Windows... 
 - pas de navigateur web
-- autonome : gestion de dépendances automatique mais superviséee
+- autonome : installation et gestion de dépendances automatique mais superviséee
+- debug mode
 
 Mémoire et historique :
 - contournement du principe stateless des API
