@@ -16,7 +16,7 @@ Enregistrement et sortie
 - le système permet de conserver les interactions
 - le principe est d'autoriser des interactions entre des modèles d'origines diverses
 
-Choix de LLM, SML possibles et possibilité d'utilisation d'un LLM Local
+Choix large de LLM / SML et possibilité d'utilisation LLM Local et propriétaire
 - grand choix de LLMs et leurs modèles pour créer un agent
 - sécurisation avec utilisation de SML/LLM sur un réseau ou un PC local (installation de LMStudio nécessaire, tutoriel à venir)
 - méthodes API en CURL ou Python natif
