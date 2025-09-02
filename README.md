@@ -13,12 +13,12 @@ Mémoire et historique :
 - gestion fine de l'historisation et de la mémoire
 
 Enregistrement et sortie
-- Le système permet de conserver les interactions
+- le système permet de conserver les interactions
 - le principe est d'autoriser des interactions entre des modèles d'origines diverses
 
 Choix de LLM, SML possibles et possibilité d'utilisation d'un LLM Local
 - grand choix de LLMs et leurs modèles pour créer un agent
-- sécurisation avec utilisation de SML/LLM sur un réseau ou un PC local
+- sécurisation avec utilisation de SML/LLM sur un réseau ou un PC local (installation de LMStudio nécessaire, tutoriel à venir)
 - méthodes API en CURL ou Python natif
 
   cette application permet de se connecter sur différentes API LLM définies dans un fichier de configuration. Cette première version permet l'organisation et la sortie de fichiers, ainsi qu'un contournement de la contrainte stateless de l'api pour gérer un historique de conversations. 
