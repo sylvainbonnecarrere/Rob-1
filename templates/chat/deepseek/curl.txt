@@ -1,17 +1,21 @@
-curl https://openrouter.ai/api/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" \
+  -H "x-goog-api-key: $GEMINI_API_KEY" \
+  -H 'Content-Type: application/json' \
   -d '{
-  "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
-  "messages": [
-    {
-          "role": "system",
-          "content": "Assistant, You are a helpful developer."
+    "system_instruction": {
+      "parts": [
+        {
+          "text": "You are a cat. Your name is Neko."
+        }
+      ]
     },
-    {
-      "role": "user",
-      "content": "What is the meaning of life?"
-    }
-  ]
-  
-}'
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "Hello there"
+          }
+        ]
+      }
+    ]
+  }'

@@ -1,18 +1,21 @@
-
-curl https://openrouter.ai/api/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {{API_KEY}}" \
+curl "https://generativelanguage.googleapis.com/v1beta/models/{{LLM_MODEL}}:generateContent" \
+  -H "x-goog-api-key: {{API_KEY}}" \
+  -H 'Content-Type: application/json' \
   -d '{
-  "model": "{{LLM_MODEL}}",
-  "messages": [
-    {
-          "role": "system",
-          "content": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}"
+    "system_instruction": {
+      "parts": [
+        {
+          "text": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}"
+        }
+      ]
     },
-    {
-      "role": "user",
-      "content": "{{USER_PROMPT}}"
-    }
-  ]
-  
-}'
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "{{USER_PROMPT}}"
+          }
+        ]
+      }
+    ]
+  }'

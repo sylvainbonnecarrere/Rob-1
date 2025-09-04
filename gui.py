@@ -1414,9 +1414,16 @@ def open_setup_menu():
     # Fonction helper pour charger les données avec le nouveau mapping
     def charger_donnees_avec_nouveau_mapping(donnees_profil):
         """Helper pour charger les données depuis la nouvelle structure chat.values/placeholders"""
+        print(f"[DEBUG] charger_donnees_avec_nouveau_mapping appelé avec: {type(donnees_profil)}")
+        print(f"[DEBUG] Clés disponibles: {list(donnees_profil.keys()) if isinstance(donnees_profil, dict) else 'Pas un dict'}")
+        
         chat_data = donnees_profil.get("chat", {})
         values_data = chat_data.get("values", {})
         placeholders_data = chat_data.get("placeholders", {})
+        
+        print(f"[DEBUG] chat_data trouvé: {bool(chat_data)}")
+        print(f"[DEBUG] values_data: {values_data}")
+        print(f"[DEBUG] placeholders_data: {placeholders_data}")
         
         # 1. VALEURS UTILISATEUR (depuis chat.values)
         api_key_var.set(values_data.get("api_key", ""))
@@ -1432,6 +1439,12 @@ def open_setup_menu():
         set_behavior_text(placeholders_data.get("placeholder_behavior", ""))  # Utiliser la fonction pour Text widget
         user_prompt_var.set(placeholders_data.get("placeholder_user_prompt", ""))
         replace_apikey_var.set(placeholders_data.get("placeholder_api_key", ""))
+        
+        print(f"[DEBUG] Placeholders chargés:")
+        print(f"  - placeholder_model_var: {placeholder_model_var.get()}")
+        print(f"  - placeholder_role_var: {placeholder_role_var.get()}")
+        print(f"  - user_prompt_var: {user_prompt_var.get()}")
+        print(f"  - replace_apikey_var: {replace_apikey_var.get()}")
         
         # 3. FALLBACK: Support ancien format pour compatibilité
         if not chat_data:
@@ -1449,12 +1462,18 @@ def open_setup_menu():
     # Fonction pour mettre à jour les champs du formulaire en fonction du profil sélectionné
     def mettre_a_jour_champs(event):
         profil_selectionne = selected_model.get()
+        print(f"[DEBUG] mettre_a_jour_champs appelé pour profil: {profil_selectionne}")
+        
         donnees_profil = charger_donnees_profil(profil_selectionne)
+        print(f"[DEBUG] Données profil chargées: {type(donnees_profil)}")
+        if isinstance(donnees_profil, dict):
+            print(f"[DEBUG] Clés du profil: {list(donnees_profil.keys())}")
 
         print(f"[DEBUG] Changement de profil vers: {profil_selectionne}")
         
         # Utiliser la fonction helper pour le mapping
         chat_data = charger_donnees_avec_nouveau_mapping(donnees_profil)
+        print(f"[DEBUG] chat_data retourné: {bool(chat_data)}")
         
         # NOUVELLE LOGIQUE: Chargement commande selon méthode du profil
         if chat_data:
@@ -1505,14 +1524,21 @@ def open_setup_menu():
                 try:
                     profile_data = charger_donnees_profil(provider.title())
                     if profile_data:
-                        method = profile_data.get('method', 'curl')
-                        print(f"[DEBUG] load_smart_template: méthode détectée depuis profil {provider}: {method}")
+                        # Utiliser la structure JSON V2 pour détecter la méthode
+                        chat_data = profile_data.get('chat', {})
+                        if chat_data:
+                            method = chat_data.get('method', 'curl')
+                            print(f"[DEBUG] load_smart_template: méthode détectée depuis chat.method {provider}: {method}")
+                        else:
+                            # Fallback vers l'ancien format
+                            method = profile_data.get('method', 'curl')
+                            print(f"[DEBUG] load_smart_template: méthode détectée depuis profil legacy {provider}: {method}")
                     else:
                         method = selected_method.get()
                         print(f"[DEBUG] load_smart_template: profil {provider} non trouvé, utilisation selected_method: {method}")
-                except:
+                except Exception as e:
                     method = selected_method.get()
-                    print(f"[DEBUG] load_smart_template: erreur détection profil {provider}, utilisation selected_method: {method}")
+                    print(f"[DEBUG] load_smart_template: erreur détection profil {provider}, utilisation selected_method: {method} (erreur: {e})")
             else:
                 method = 'curl'
                 print(f"[DEBUG] load_smart_template: provider différent, utilisation curl par défaut")
@@ -1565,13 +1591,24 @@ def open_setup_menu():
                 try:
                     profile_data = charger_donnees_profil(provider.title())
                     if profile_data:
-                        method = profile_data.get('method', 'curl')
+                        # Utiliser la structure JSON V2 pour détecter la méthode
+                        chat_data = profile_data.get('chat', {})
+                        if chat_data:
+                            method = chat_data.get('method', 'curl')
+                            print(f"[DEBUG] load_basic_template: méthode détectée depuis chat.method {provider}: {method}")
+                        else:
+                            # Fallback vers l'ancien format
+                            method = profile_data.get('method', 'curl')
+                            print(f"[DEBUG] load_basic_template: méthode détectée depuis profil legacy {provider}: {method}")
                     else:
                         method = selected_method.get()
-                except:
+                        print(f"[DEBUG] load_basic_template: profil {provider} non trouvé, utilisation selected_method: {method}")
+                except Exception as e:
                     method = selected_method.get()
+                    print(f"[DEBUG] load_basic_template: erreur détection profil {provider}, utilisation selected_method: {method} (erreur: {e})")
             else:
                 method = 'curl'
+                print(f"[DEBUG] load_basic_template: provider différent, utilisation curl par défaut")
         
         print(f"[DEBUG] load_basic_template: {provider} {template_type} {method}")
         
@@ -1761,6 +1798,9 @@ print("Template native à implémenter pour {provider}")
             curl_frame.grid(row=13, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
             curl_exe_label.config(text="Template Python Native :")
             placeholder_command_label.config(text="Placeholder Command (native_basic.py) :")
+        
+        # Basculer le contenu affiché selon la méthode sélectionnée
+        switch_template_content()
         
         # Recharger le template selon la nouvelle méthode (explicite)
         current_provider = selected_model.get()
@@ -2408,16 +2448,49 @@ print("Template native à implémenter pour {provider}")
     
     # Variable pour compatibilité avec le code existant
     curl_exe_var = tk.StringVar(value="")
+    native_exe_var = tk.StringVar(value="")  # Variable séparée pour le contenu native
     
     # Fonctions helper pour synchroniser StringVar avec Text widget
     def set_curl_text(value):
-        """Met à jour le contenu du Text widget"""
+        """Met à jour le contenu du Text widget selon la méthode sélectionnée"""
         curl_exe_text.delete(1.0, tk.END)
         curl_exe_text.insert(1.0, value)
+        
+        # Sauvegarder dans la bonne variable selon la méthode actuelle
+        current_method = selected_method.get()
+        if current_method == "curl":
+            # Sauvegarder dans curl_exe_var interne (pas le Text widget)
+            original_set(value)
+        else:  # native
+            # Sauvegarder dans native_exe_var
+            native_exe_var.set(value)
     
     def get_curl_text():
         """Récupère le contenu du Text widget"""
-        return curl_exe_text.get(1.0, tk.END).rstrip('\n')
+        content = curl_exe_text.get(1.0, tk.END).rstrip('\n')
+        
+        # Sauvegarder aussi dans la bonne variable selon la méthode actuelle
+        current_method = selected_method.get()
+        if current_method == "curl":
+            original_set(content)
+        else:  # native
+            native_exe_var.set(content)
+            
+        return content
+    
+    def switch_template_content():
+        """Bascule le contenu affiché selon la méthode sélectionnée"""
+        current_method = selected_method.get()
+        if current_method == "curl":
+            # Afficher le contenu curl stocké
+            content = original_get()
+        else:  # native
+            # Afficher le contenu native stocké
+            content = native_exe_var.get()
+        
+        # Mettre à jour l'affichage sans déclencher la sauvegarde
+        curl_exe_text.delete(1.0, tk.END)
+        curl_exe_text.insert(1.0, content)
     
     # Redéfinir les méthodes de la StringVar pour utiliser le Text widget
     original_set = curl_exe_var.set
@@ -2498,7 +2571,14 @@ print("Template native à implémenter pour {provider}")
                     replace_apikey_var.set(valeurs_defaut["placeholder_api_key"])
         
         # Charger méthode et type template (nouveaux champs V2)
-        selected_method.set(donnees_profil.get("method", "curl"))
+        if chat_data:
+            selected_method.set(chat_data.get("method", "curl"))
+            print(f"[DEBUG] Méthode chargée depuis chat_data: {chat_data.get('method', 'curl')}")
+        else:
+            # Fallback pour ancien format
+            selected_method.set(donnees_profil.get("method", "curl"))
+            print(f"[DEBUG] Méthode chargée depuis donnees_profil (fallback): {donnees_profil.get('method', 'curl')}")
+        
         selected_template_type.set(donnees_profil.get("template_type", "chat"))
         
         # Initialiser les modèles et sélectionner le modèle courant
@@ -2545,23 +2625,43 @@ print("Template native à implémenter pour {provider}")
             print(f"⚠️ Template {template_path} introuvable - création profil minimal")
             config_data = {}
 
-        # Mettre à jour seulement les champs modifiés par l'utilisateur
-        config_data.update({
-            "name": profil_selectionne,
-            "user_prompt": user_prompt_entry.get(),
-            "api_key": api_key_entry.get().strip(),
-            "role": role_entry.get(),
+        # Mettre à jour seulement les champs modifiés par l'utilisateur SELON LA NOUVELLE STRUCTURE V2
+        # Structure V2: organiser les données dans les bonnes sections
+        
+        # S'assurer que la structure chat existe
+        if "chat" not in config_data:
+            config_data["chat"] = {
+                "method": "curl",
+                "values": {},
+                "placeholders": {},
+                "response_path": ["candidates", 0, "content", "parts", 0, "text"]
+            }
+        
+        # Mettre à jour la section chat.values (données utilisateur)
+        config_data["chat"]["values"].update({
+            "llm_model": selected_llm_model.get(),
+            "api_key": api_key_var.get().strip(),  # Corriger: utiliser api_key_var au lieu de api_key_entry
+            "role": role_var.get(),  # Corriger: utiliser role_var au lieu de role_entry
             "behavior": get_default_behavior_text(),  # Utiliser la fonction pour Text widget
             "history": history_checkbutton_var.get(),
-            "default": default_profile_var.get(),
-            "replace_apikey": replace_apikey_var.get(),
+            "default": default_profile_var.get()
+        })
+        
+        # Mettre à jour la section chat.placeholders (valeurs par défaut)
+        config_data["chat"]["placeholders"].update({
             "placeholder_model": placeholder_model_var.get(),
+            "placeholder_api_key": replace_apikey_var.get(),
             "placeholder_role": placeholder_role_var.get(),
             "placeholder_behavior": get_behavior_text(),  # Utiliser la fonction pour Text widget
-            "template_id": f"{profil_selectionne.lower()}_chat",
-            "method": selected_method.get(),  # Nouveau champ V2
-            "template_type": selected_template_type.get(),  # Nouveau champ V2
-            "llm_model": selected_llm_model.get(),  # Nouveau champ V2
+            "placeholder_user_prompt": user_prompt_var.get()  # Corriger: utiliser user_prompt_var au lieu de user_prompt_entry
+        })
+        
+        # Mettre à jour la méthode et type de template
+        config_data["chat"]["method"] = selected_method.get()
+        
+        # Données générales du profil (niveau racine)
+        config_data.update({
+            "name": profil_selectionne
         })
         
         # Assurer que file_generation existe (peut venir du template ou par défaut)
@@ -2584,10 +2684,47 @@ print("Template native à implémenter pour {provider}")
             # Sauvegarder via ConfigManager
             success = config_manager.save_profile(profil_selectionne, config_data)
             if success:
-                # Sauvegarder le template curl si fourni
-                curl_exe = curl_exe_var.get()
-                if curl_exe.strip():
-                    config_manager.save_template(f"{profil_selectionne.lower()}_chat", curl_exe)
+                # Sauvegarder le template principal selon la méthode sélectionnée
+                method = selected_method.get()
+                
+                # Récupérer le contenu depuis la bonne variable
+                if method == "curl":
+                    template_content = original_get()  # Contenu curl stocké
+                else:  # native
+                    template_content = native_exe_var.get()  # Contenu native stocké
+                
+                if template_content.strip():
+                    # Chemin du fichier template selon la méthode
+                    if method == "curl":
+                        template_filepath = os.path.join("templates", "chat", profil_selectionne.lower(), "curl.txt")
+                    else:  # native
+                        template_filepath = os.path.join("templates", "chat", profil_selectionne.lower(), "native.py")
+                    
+                    # Sauvegarder directement dans le bon fichier
+                    try:
+                        os.makedirs(os.path.dirname(template_filepath), exist_ok=True)
+                        with open(template_filepath, 'w', encoding='utf-8') as f:
+                            f.write(template_content)
+                        print(f"✅ Template {method} sauvegardé: {template_filepath} ({len(template_content)} caractères)")
+                    except Exception as e:
+                        print(f"❌ Erreur sauvegarde template {method}: {e}")
+                
+                # Sauvegarder le template placeholder command si fourni
+                placeholder_command = placeholder_command_text.get("1.0", tk.END).strip()
+                if placeholder_command:
+                    # Sauvegarder dans le fichier _basic correspondant
+                    if method == "curl":
+                        basic_filepath = os.path.join("templates", "chat", profil_selectionne.lower(), "curl_basic.txt")
+                    else:  # native
+                        basic_filepath = os.path.join("templates", "chat", profil_selectionne.lower(), "native_basic.py")
+                    
+                    try:
+                        os.makedirs(os.path.dirname(basic_filepath), exist_ok=True)
+                        with open(basic_filepath, 'w', encoding='utf-8') as f:
+                            f.write(placeholder_command)
+                        print(f"✅ Placeholder command sauvegardé: {basic_filepath} ({len(placeholder_command)} caractères)")
+                    except Exception as e:
+                        print(f"❌ Erreur sauvegarde placeholder command: {e}")
                 
                 # Définir comme profil par défaut si nécessaire
                 if default_profile_var.get():
@@ -2659,14 +2796,23 @@ print("Template native à implémenter pour {provider}")
         
         print(f"[DEBUG] Profil par défaut chargé avec succès: {profil_selectionne}")
         
-        # INITIALISATION DES PLACEHOLDERS - Force l'extraction dès l'ouverture
+        # INITIALISATION DES PLACEHOLDERS - Priorité aux valeurs sauvegardées
         if template_id:
             print(f"[DEBUG] Initialisation des placeholders pour template: {template_id}")
+            # D'abord charger le template (structure des champs)
             update_form_with_llm_data(template_id)
+            # PUIS appliquer les valeurs sauvegardées par-dessus
+            if chat_data and chat_data.get("placeholders"):
+                print(f"[DEBUG] Application des placeholders sauvegardés par-dessus le template")
+                charger_donnees_avec_nouveau_mapping(donnees_profil)
         else:
             # Template par défaut Gemini si aucun trouvé
             print(f"[DEBUG] Pas de template_id, initialisation Gemini par défaut")
             update_form_with_llm_data("gemini_chat")
+            # PUIS appliquer les valeurs sauvegardées par-dessus  
+            if chat_data and chat_data.get("placeholders"):
+                print(f"[DEBUG] Application des placeholders sauvegardés Gemini par défaut")
+                charger_donnees_avec_nouveau_mapping(donnees_profil)
     except Exception as e:
         print(f"[DEBUG] Erreur lors du chargement initial du profil par défaut Setup API: {e}")
         # Valeurs par défaut de sécurité

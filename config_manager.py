@@ -222,6 +222,12 @@ class ConfigManager:
             if not skip_validation and not self.validate_profile(profile_data):
                 return False
             
+            # Gestion exclusive du profil par défaut
+            chat_data = profile_data.get('chat', {})
+            values_data = chat_data.get('values', {})
+            if values_data.get('default') is True:
+                self._ensure_exclusive_default_profile(profile_name, 'chat')
+            
             file_path = os.path.join(self.profiles_dir, f"{profile_name}.json")
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(profile_data, f, indent=2, ensure_ascii=False)
@@ -231,6 +237,32 @@ class ConfigManager:
         except Exception as e:
             self.logger.error(f"Erreur sauvegarde profil {profile_name} : {e}")
             return False
+    
+    def _ensure_exclusive_default_profile(self, current_profile: str, profile_type: str):
+        """Assure qu'un seul profil soit défini comme défaut pour un type donné"""
+        try:
+            # Parcourir tous les profils existants
+            for profile_name in self.list_profiles():
+                if profile_name == current_profile:
+                    continue  # Ne pas modifier le profil en cours de sauvegarde
+                
+                # Charger le profil
+                profile_data = self.load_profile(profile_name)
+                if not profile_data:
+                    continue
+                
+                # Vérifier si ce profil a le même type et est marqué comme défaut
+                type_data = profile_data.get(profile_type, {})
+                values_data = type_data.get('values', {})
+                
+                if values_data.get('default') is True:
+                    # Désactiver le défaut et sauvegarder
+                    values_data['default'] = False
+                    self.save_profile(profile_name, profile_data, skip_validation=True)
+                    self.logger.debug(f"Profil {profile_name} défaut désactivé (nouveau défaut: {current_profile})")
+                    
+        except Exception as e:
+            self.logger.error(f"Erreur lors de la gestion exclusive du profil par défaut : {e}")
     
     def load_profile(self, profile_name: str) -> Optional[Dict[str, Any]]:
         """Charge un profil JSON"""
