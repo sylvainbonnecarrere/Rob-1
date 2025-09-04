@@ -1,17 +1,24 @@
 {
   "name": "LMStudio",
-  "api_url": "http://localhost:1234/v1/chat/completions",
-  "api_key": "",
-  "role": "",
-  "behavior": "",
-  "history": true,
-  "default": true,
-  "replace_apikey": "",
-  "template_id": "lmstudio_chat",
-  "method": "curl",
-  "template_type": "chat",
-  "llm_model": "google/gemma-3-1b",
-  "response_path": ["candidates", 0, "content", "parts", 0, "text"],
+  "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "google/gemma-3-1b",
+      "api_key": "XXXX",                    
+      "role": "Expert architecte",        
+      "behavior": "synthétique, 4 phrases max.", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "google/gemma-3-1b",      
+      "placeholder_api_key": "$GEMINI_API_KEY",     
+      "placeholder_role": "Tu es un expert",         
+      "placeholder_behavior": "architecte et développeur", 
+      "placeholder_user_prompt": "Écris un script simple pour calculer la factorielle d'un nombre."     
+    },
+     "response_path": ["candidates", 0, "content", "parts", 0, "text"]
+  }, 
   "conversation_management": {
     "words_enabled": true,
     "sentences_enabled": true,

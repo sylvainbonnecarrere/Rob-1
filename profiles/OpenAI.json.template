@@ -1,17 +1,24 @@
 {
   "name": "OpenAI",
-  "api_url": "https://api.openai.com/v1/chat/completions",
-  "api_key": "YOUR_OPENAI_API_KEY_HERE",
-  "role": "",
-  "behavior": "",
-  "history": true,
-  "default": false,
-  "replace_apikey": "OPENAI_API_KEY",
-  "template_id": "openai_chat",
-  "method": "curl",
-  "template_type": "chat",
-  "llm_model": "gpt-4",
-  "response_path": ["choices", 0, "message", "content"],
+  "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "gpt-5",
+      "api_key": "XXXX",                    
+      "role": "Pirate informatique",        
+      "behavior": "white hat, doué et éthique", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "gpt-5",      
+      "placeholder_api_key": "OPENAI_API_KEY",     
+      "placeholder_role": "Assistant",         
+      "placeholder_behavior": "talk like a pirate", 
+      "placeholder_user_prompt": "Are semicolons optional in JavaScript?"     
+    },
+      "response_path": ["choices", 0, "message", "content"]
+  },
   "conversation": {
     "enabled": true,
     "max_context_length": 4000,

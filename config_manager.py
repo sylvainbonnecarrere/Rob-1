@@ -16,6 +16,7 @@ PROFILE_SCHEMA = {
     "type": "object",
     "properties": {
         "name": {"type": "string"},
+        # Anciens champs (optionnels pour compatibilité)
         "api_key": {"type": ["string", "null"]},
         "api_url": {"type": "string"},
         "behavior": {"type": "string"},
@@ -23,13 +24,45 @@ PROFILE_SCHEMA = {
         "default": {"type": "boolean"},
         "history": {"type": "boolean"},
         "replace_apikey": {"type": "string"},
-        "template_id": {"type": "string"},  # Référence vers template séparé
-        "method": {"type": "string"},  # Nouveau: curl, python, etc.
-        "template_type": {"type": "string"},  # Nouveau: chat, completion, etc.
-        "llm_model": {"type": "string"},  # Nouveau: modèle LLM
-        "response_path": {  # Nouveau: chemin pour extraire la réponse
+        "template_id": {"type": "string"},
+        "method": {"type": "string"},
+        "template_type": {"type": "string"},
+        "llm_model": {"type": "string"},
+        "response_path": {
             "type": "array",
             "items": {"type": ["string", "integer"]}
+        },
+        # Nouvelle structure chat avec values et placeholders
+        "chat": {
+            "type": "object",
+            "properties": {
+                "method": {"type": "string"},
+                "values": {
+                    "type": "object",
+                    "properties": {
+                        "llm_model": {"type": "string"},
+                        "api_key": {"type": ["string", "null"]},
+                        "role": {"type": "string"},
+                        "behavior": {"type": "string"},
+                        "history": {"type": "boolean"},
+                        "default": {"type": "boolean"}
+                    }
+                },
+                "placeholders": {
+                    "type": "object",
+                    "properties": {
+                        "placeholder_model": {"type": "string"},
+                        "placeholder_api_key": {"type": "string"},
+                        "placeholder_role": {"type": "string"},
+                        "placeholder_behavior": {"type": "string"},
+                        "placeholder_user_prompt": {"type": "string"}
+                    }
+                },
+                "response_path": {
+                    "type": "array",
+                    "items": {"type": ["string", "integer"]}
+                }
+            }
         },
         "file_generation": {
             "type": "object",
@@ -102,7 +135,7 @@ PROFILE_SCHEMA = {
             }
         }
     },
-    "required": ["name", "api_key", "api_url", "default"]
+    "required": ["name"]  # Seul "name" obligatoire, permet ancien et nouveau format
 }
 
 SYSTEM_PROFILE_SCHEMA = {
@@ -183,10 +216,10 @@ class ConfigManager:
             self.logger.error(f"Erreur validation profil : {e.message}")
             return False
     
-    def save_profile(self, profile_name: str, profile_data: Dict[str, Any]) -> bool:
-        """Sauvegarde un profil en JSON avec validation"""
+    def save_profile(self, profile_name: str, profile_data: Dict[str, Any], skip_validation: bool = False) -> bool:
+        """Sauvegarde un profil en JSON avec validation optionnelle"""
         try:
-            if not self.validate_profile(profile_data):
+            if not skip_validation and not self.validate_profile(profile_data):
                 return False
             
             file_path = os.path.join(self.profiles_dir, f"{profile_name}.json")
@@ -553,8 +586,8 @@ class ConfigManager:
                             }
                             self.logger.info(f"✅ Section conversation_management ajoutée au profil {template_name}")
                         
-                        # Sauvegarder comme profil (les clés API restent vides)
-                        success = self.save_profile(template_name, template_data) and success
+                        # Sauvegarder comme profil (sans validation pour accepter la nouvelle structure)
+                        success = self.save_profile(template_name, template_data, skip_validation=True) and success
                         self.logger.info(f"✅ Profil {template_name} créé à partir du template sécurisé")
                     else:
                         self.logger.warning(f"⚠️ Template {template_path} introuvable")

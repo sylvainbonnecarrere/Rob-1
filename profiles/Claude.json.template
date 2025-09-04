@@ -1,17 +1,24 @@
 {
-  "name": "Claude",
-  "api_url": "https://api.anthropic.com/v1/messages",
-  "api_key": "YOUR_CLAUDE_API_KEY_HERE",
-  "role": "assistant IA analytique",
-  "behavior": "réponses analytiques et approfondies, raisonnement étape par étape",
-  "history": true,
-  "default": false,
-  "replace_apikey": "$ANTHROPIC_API_KEY",
-  "template_id": "claude_chat",
-  "method": "curl",
-  "template_type": "chat",
-  "llm_model": "claude-3-sonnet-20240229",
-  "response_path": ["content", 0, "text"],
+  "name": "Claude",  
+  "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "claude-sonnet-4-20250514",
+      "api_key": "YOUR_CLAUDE_API_KEY_HERE",                    
+      "role": "Instructeur de code",        
+      "behavior": "synthétique, précis et méthodique", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "claude-sonnet-4-20250514",      
+      "placeholder_api_key": "$ANTHROPIC_API_KEY",     
+      "placeholder_role": "Assistant, ",         
+      "placeholder_behavior": "spécialisé en code moderne", 
+      "placeholder_user_prompt": "What is the best French Cheese?"     
+    },
+    "response_path": ["content", 0, "text"]
+  },
   "file_generation": {
     "enabled": false,
     "mode": "simple",

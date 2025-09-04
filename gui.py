@@ -175,7 +175,6 @@ def initialiser_profils_par_defaut():
         "Gemini.json": {
             "name": "Gemini",
             "api_key": "",
-            "api_url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
             "behavior": "excité, ronchon, répond en une phrase ou deux",
             "curl_exe": "curl \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY\" \\\n  -H 'Content-Type: application/json' \\\n  -X POST \\\n  -d '{\"contents\": [{\"parts\": [{\"text\": \"Explain how AI works\"}]}]}'",
             "default": True,
@@ -187,7 +186,6 @@ def initialiser_profils_par_defaut():
         "OpenAI.json": {
             "name": "OpenAI",
             "api_key": "",
-            "api_url": "https://api.openai.com/v1/completions",
             "behavior": "comportement initial",
             "curl_exe": "",
             "default": False,
@@ -199,7 +197,6 @@ def initialiser_profils_par_defaut():
         "Claude.json": {
             "name": "Claude",
             "api_key": "",
-            "api_url": "https://api.anthropic.com/v1/claude",
             "behavior": "comportement initial",
             "curl_exe": "",
             "default": False,
@@ -1392,7 +1389,6 @@ def open_setup_menu():
             # Si tout échoue, retourner des valeurs par défaut pour éviter l'erreur
             print(f"[DEBUG] Profil {profil} non trouvé, utilisation des valeurs par défaut")
             return {
-                "api_url": "",
                 "api_key": "",
                 "role": "",
                 "behavior": "",
@@ -1406,7 +1402,6 @@ def open_setup_menu():
             print(f"[DEBUG] Erreur lors du chargement du profil {profil}: {e}")
             # Retourner des valeurs par défaut au lieu d'afficher une popup d'erreur
             return {
-                "api_url": "",
                 "api_key": "",
                 "role": "",
                 "behavior": "",
@@ -1416,34 +1411,77 @@ def open_setup_menu():
                 "template_id": "gemini_chat" if "gemini" in profil.lower() else ""
             }
 
+    # Fonction helper pour charger les données avec le nouveau mapping
+    def charger_donnees_avec_nouveau_mapping(donnees_profil):
+        """Helper pour charger les données depuis la nouvelle structure chat.values/placeholders"""
+        chat_data = donnees_profil.get("chat", {})
+        values_data = chat_data.get("values", {})
+        placeholders_data = chat_data.get("placeholders", {})
+        
+        # 1. VALEURS UTILISATEUR (depuis chat.values)
+        api_key_var.set(values_data.get("api_key", ""))
+        role_var.set(values_data.get("role", ""))
+        set_default_behavior_text(values_data.get("behavior", ""))  # Utiliser la fonction pour Text widget
+        history_checkbutton_var.set(values_data.get("history", False))
+        default_profile_var.set(values_data.get("default", False))
+        selected_llm_model.set(values_data.get("llm_model", ""))  # Ajout du modèle LLM
+        
+        # 2. PLACEHOLDERS (depuis chat.placeholders)
+        placeholder_model_var.set(placeholders_data.get("placeholder_model", ""))
+        placeholder_role_var.set(placeholders_data.get("placeholder_role", ""))
+        set_behavior_text(placeholders_data.get("placeholder_behavior", ""))  # Utiliser la fonction pour Text widget
+        user_prompt_var.set(placeholders_data.get("placeholder_user_prompt", ""))
+        replace_apikey_var.set(placeholders_data.get("placeholder_api_key", ""))
+        
+        # 3. FALLBACK: Support ancien format pour compatibilité
+        if not chat_data:
+            print(f"[DEBUG] Ancien format détecté, utilisation format legacy")
+            api_key_var.set(donnees_profil.get("api_key", ""))
+            role_var.set(donnees_profil.get("role", ""))
+            set_default_behavior_text(donnees_profil.get("behavior", ""))  # Utiliser la fonction pour Text widget
+            history_checkbutton_var.set(donnees_profil.get("history", False))
+            default_profile_var.set(donnees_profil.get("default", False))
+            replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
+            selected_llm_model.set(donnees_profil.get("llm_model", ""))
+        
+        return chat_data
+
     # Fonction pour mettre à jour les champs du formulaire en fonction du profil sélectionné
     def mettre_a_jour_champs(event):
         profil_selectionne = selected_model.get()
         donnees_profil = charger_donnees_profil(profil_selectionne)
 
-        # NE PAS écraser api_url_var car il est utilisé pour USER_PROMPT, pas pour URL
-        # api_url_var.set(donnees_profil.get("api_url", ""))  # COMMENTÉ: cause confusion URL/USER_PROMPT
-        api_key_var.set(donnees_profil.get("api_key", ""))
-        role_var.set(donnees_profil.get("role", ""))
-        default_behavior_var.set(donnees_profil.get("behavior", ""))
-        history_checkbutton_var.set(donnees_profil.get("history", False))
-        default_profile_var.set(donnees_profil.get("default", False))
-        replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
+        print(f"[DEBUG] Changement de profil vers: {profil_selectionne}")
         
-        # Charger le template intelligent selon la méthode du profil
-        template_id = donnees_profil.get("template_id", "")
-        if template_id:
-            # Extraire provider et type du template_id
-            provider = template_id.split('_')[0] if '_' in template_id else profil.lower()
-            template_type = template_id.split('_')[1] if '_' in template_id and len(template_id.split('_')) > 1 else 'chat'
+        # Utiliser la fonction helper pour le mapping
+        chat_data = charger_donnees_avec_nouveau_mapping(donnees_profil)
+        
+        # NOUVELLE LOGIQUE: Chargement commande selon méthode du profil
+        if chat_data:
+            method = chat_data.get("method", "curl")
+            llm_name = profil_selectionne.lower()
+            template_type = "chat"  # Par défaut pour Setup API
             
-            # Utiliser notre système intelligent au lieu de l'APIManager direct
-            method = donnees_profil.get("method", "curl")
-            template_content = load_smart_template(provider, template_type, method, for_display=True)
-            # Note: load_smart_template appelle déjà curl_exe_var.set(), pas besoin de le refaire
+            print(f"[DEBUG] Chargement template: {llm_name}/{template_type}/{method}")
+            print(f"[DEBUG] Path recherché: templates/{template_type}/{llm_name}/{method}.txt ou {method}.py")
+            
+            # Charger le template selon la méthode du profil
+            template_content = load_smart_template(llm_name, template_type, method, for_display=True)
+            
         else:
-            # Fallback vers curl_exe pour compatibilité
-            curl_exe_var.set(donnees_profil.get("curl_exe", ""))
+            # FALLBACK: Support ancien format pour compatibilité
+            template_id = donnees_profil.get("template_id", "")
+            if template_id:
+                # Extraire provider et type du template_id
+                provider = template_id.split('_')[0] if '_' in template_id else profil_selectionne.lower()
+                template_type = template_id.split('_')[1] if '_' in template_id and len(template_id.split('_')) > 1 else 'chat'
+                
+                # Utiliser notre système intelligent au lieu de l'APIManager direct
+                method = donnees_profil.get("method", "curl")
+                template_content = load_smart_template(provider, template_type, method, for_display=True)
+            else:
+                # Fallback vers curl_exe pour compatibilité
+                curl_exe_var.set(donnees_profil.get("curl_exe", ""))
 
     # Fonction centralisée pour charger le bon template selon la méthode
     def load_smart_template(provider, template_type="chat", method=None, for_display=True):
@@ -1583,12 +1621,30 @@ print("Template native à implémenter pour {provider}")
 
     # Charger le profil par défaut au démarrage via ConfigManager
     def charger_profil_defaut():
-        """Charge le profil marqué comme défaut via APIManager (Phase 2)."""
+        """Charge le profil marqué comme défaut selon la nouvelle logique chat.values.default"""
         try:
-            profil_defaut = api_manager.get_default_profile()
-            if profil_defaut:
-                return profil_defaut.get('name', 'Gemini')
-            return "Gemini"  # Fallback si aucun profil par défaut
+            # NOUVELLE LOGIQUE: Chercher dans tous les profils celui avec chat.values.default = true
+            profils_disponibles = charger_profils()
+            
+            for profil_name in profils_disponibles:
+                try:
+                    donnees_profil = charger_donnees_profil(profil_name)
+                    chat_data = donnees_profil.get("chat", {})
+                    values_data = chat_data.get("values", {})
+                    
+                    if values_data.get("default", False):
+                        print(f"[DEBUG] Profil par défaut trouvé: {profil_name}")
+                        return profil_name
+                except Exception as e:
+                    print(f"[DEBUG] Erreur lors de la vérification du profil {profil_name}: {e}")
+                    continue
+            
+            # FALLBACK: Si aucun profil avec default=true, prendre le premier disponible
+            if profils_disponibles:
+                print(f"[DEBUG] Aucun profil par défaut trouvé, utilisation du premier: {profils_disponibles[0]}")
+                return profils_disponibles[0]
+            
+            return "Gemini"  # Fallback final
         except Exception as e:
             logging.error(f"Erreur lors du chargement du profil par défaut Setup API : {e}")
             return "Gemini"
@@ -1620,7 +1676,7 @@ print("Template native à implémenter pour {provider}")
             curl_exe_label.config(text="Commande Curl :")
         elif method == "native":
             # Mode native : afficher le template Python
-            api_url_label.config(text="Paramètres template :")
+            user_prompt_label.config(text="Paramètres template :")
             curl_exe_label.grid(row=14, column=0, sticky="nw", pady=5, padx=(10,5))
             curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
             curl_exe_label.config(text="Template Python Native :")
@@ -1718,11 +1774,11 @@ print("Template native à implémenter pour {provider}")
                     if "placeholder_model" in profil_data:
                         placeholder_model_var.set(profil_data["placeholder_model"])
                     if "placeholder_user_prompt" in profil_data:
-                        api_url_var.set(profil_data["placeholder_user_prompt"])
+                        user_prompt_var.set(profil_data["placeholder_user_prompt"])
                     if "placeholder_role" in profil_data:
                         placeholder_role_var.set(profil_data["placeholder_role"])
                     if "placeholder_behavior" in profil_data:
-                        placeholder_behavior_var.set(profil_data["placeholder_behavior"])
+                        set_behavior_text(profil_data["placeholder_behavior"])  # Utiliser la fonction pour Text widget
                     if "placeholder_api_key" in profil_data:
                         replace_apikey_var.set(profil_data["placeholder_api_key"])
                     
@@ -1745,11 +1801,11 @@ print("Template native à implémenter pour {provider}")
                         if "placeholder_model" in valeurs_defaut:
                             placeholder_model_var.set(valeurs_defaut["placeholder_model"])
                         if "placeholder_user_prompt" in valeurs_defaut:
-                            api_url_var.set(valeurs_defaut["placeholder_user_prompt"])
+                            user_prompt_var.set(valeurs_defaut["placeholder_user_prompt"])
                         if "placeholder_role" in valeurs_defaut:
                             placeholder_role_var.set(valeurs_defaut["placeholder_role"])
                         if "placeholder_behavior" in valeurs_defaut:
-                            placeholder_behavior_var.set(valeurs_defaut["placeholder_behavior"])
+                            set_behavior_text(valeurs_defaut["placeholder_behavior"])  # Utiliser la fonction pour Text widget
                         if "placeholder_api_key" in valeurs_defaut:
                             replace_apikey_var.set(valeurs_defaut["placeholder_api_key"])
                     
@@ -2000,16 +2056,16 @@ print("Template native à implémenter pour {provider}")
             },
             "SYSTEM_PROMPT_BEHAVIOR": {
                 "label": placeholder_behavior_label,
-                "entry": placeholder_behavior_entry, 
+                "entry": placeholder_behavior_text,  # Widget Text au lieu d'Entry
                 "var": placeholder_behavior_var,
                 "row": 8,
                 "text": "Placeholder Comportement :",
                 "value_key": "placeholder_behavior"
             },
             "USER_PROMPT": {
-                "label": api_url_label,
-                "entry": api_url_entry,
-                "var": api_url_var,
+                "label": user_prompt_label,
+                "entry": user_prompt_entry,
+                "var": user_prompt_var,
                 "row": 9,
                 "text": "Placeholder User Prompt :",
                 "value_key": "placeholder_user_prompt"
@@ -2122,26 +2178,77 @@ print("Template native à implémenter pour {provider}")
     placeholder_role_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_role_var)
     placeholder_role_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
-    # Comportement Enregistré
+    # Comportement Enregistré - Textarea avec 3 lignes et scrollbar
     default_behavior_label = ttk.Label(scrollable_frame, text="Comportement par Défaut :")
-    default_behavior_label.grid(row=7, column=0, sticky="w", pady=3, padx=(10,5))
+    default_behavior_label.grid(row=7, column=0, sticky="nw", pady=3, padx=(10,5))
+    
+    # Frame pour le textarea avec scrollbar
+    default_behavior_frame = ttk.Frame(scrollable_frame)
+    default_behavior_frame.grid(row=7, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    default_behavior_frame.grid_columnconfigure(0, weight=1)
+    
+    # Textarea avec scrollbar verticale (3 lignes)
+    default_behavior_text = tk.Text(default_behavior_frame, height=3, width=50, wrap=tk.WORD)
+    default_behavior_scrollbar = ttk.Scrollbar(default_behavior_frame, orient="vertical", command=default_behavior_text.yview)
+    default_behavior_text.configure(yscrollcommand=default_behavior_scrollbar.set)
+    
+    default_behavior_text.grid(row=0, column=0, sticky="ew")
+    default_behavior_scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    # Variable pour compatibilité avec le code existant
     default_behavior_var = tk.StringVar(value="")
-    default_behavior_entry = ttk.Entry(scrollable_frame, textvariable=default_behavior_var)
-    default_behavior_entry.grid(row=7, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    
+    # Fonctions helper pour synchroniser StringVar avec Text widget
+    def set_default_behavior_text(value):
+        """Met à jour le contenu du Text widget"""
+        default_behavior_text.delete(1.0, tk.END)
+        default_behavior_text.insert(1.0, value)
+    
+    def get_default_behavior_text():
+        """Récupère le contenu du Text widget"""
+        return default_behavior_text.get(1.0, tk.END).strip()
+    
+    # Synchroniser avec StringVar pour compatibilité
+    def on_default_behavior_text_change(*args):
+        default_behavior_var.set(get_default_behavior_text())
+    
+    default_behavior_text.bind('<KeyRelease>', on_default_behavior_text_change)
+    default_behavior_text.bind('<Button-1>', on_default_behavior_text_change)
 
-    # Placeholder Comportement
+    # Placeholder Comportement - Textarea avec 3 lignes SANS scrollbar pour test
     placeholder_behavior_label = ttk.Label(scrollable_frame, text="Placeholder Comportement :")
-    placeholder_behavior_label.grid(row=8, column=0, sticky="w", pady=3, padx=(10,5))
+    placeholder_behavior_label.grid(row=8, column=0, sticky="nw", pady=3, padx=(10,5))
+    
+    # Textarea simple sans scrollbar pour éliminer le scrollbar orphelin
+    placeholder_behavior_text = tk.Text(scrollable_frame, height=3, width=50, wrap=tk.WORD)
+    placeholder_behavior_text.grid(row=8, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    
+    # Variable pour compatibilité avec le code existant
     placeholder_behavior_var = tk.StringVar(value="")
-    placeholder_behavior_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_behavior_var)
-    placeholder_behavior_entry.grid(row=8, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    
+    # Fonctions helper pour synchroniser StringVar avec Text widget
+    def set_behavior_text(value):
+        """Met à jour le contenu du Text widget"""
+        placeholder_behavior_text.delete(1.0, tk.END)
+        placeholder_behavior_text.insert(1.0, value)
+    
+    def get_behavior_text():
+        """Récupère le contenu du Text widget"""
+        return placeholder_behavior_text.get(1.0, tk.END).strip()
+    
+    # Synchroniser avec StringVar pour compatibilité
+    def on_behavior_text_change(*args):
+        placeholder_behavior_var.set(get_behavior_text())
+    
+    placeholder_behavior_text.bind('<KeyRelease>', on_behavior_text_change)
+    placeholder_behavior_text.bind('<Button-1>', on_behavior_text_change)
 
     # Placeholder User Prompt
-    api_url_label = ttk.Label(scrollable_frame, text="Placeholder User Prompt :")
-    api_url_label.grid(row=9, column=0, sticky="w", pady=3, padx=(10,5))
-    api_url_var = tk.StringVar(value="")
-    api_url_entry = ttk.Entry(scrollable_frame, textvariable=api_url_var, width=50)
-    api_url_entry.grid(row=9, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    user_prompt_label = ttk.Label(scrollable_frame, text="Placeholder User Prompt :")
+    user_prompt_label.grid(row=9, column=0, sticky="w", pady=3, padx=(10,5))
+    user_prompt_var = tk.StringVar(value="")
+    user_prompt_entry = ttk.Entry(scrollable_frame, textvariable=user_prompt_var, width=50)
+    user_prompt_entry.grid(row=9, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
     # Clé API
     api_key_label = ttk.Label(scrollable_frame, text="Clé API :")
@@ -2157,23 +2264,28 @@ print("Template native à implémenter pour {provider}")
     replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var)
     replace_apikey_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
-    # Historique
+    # Checkboxes Historique et Défaut sur la même ligne
+    # Frame pour contenir les checkboxes côte à côte
+    checkboxes_frame = ttk.Frame(scrollable_frame)
+    checkboxes_frame.grid(row=12, column=0, columnspan=3, sticky="ew", pady=(3,1), padx=(10,10))  # Très peu d'espace en bas
+    
+    # Historique - colonne 0
     history_checkbutton_var = tk.BooleanVar(value=False)
-    history_checkbutton = ttk.Checkbutton(scrollable_frame, text="Historique", variable=history_checkbutton_var)
-    history_checkbutton.grid(row=12, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
+    history_checkbutton = ttk.Checkbutton(checkboxes_frame, text="Historique", variable=history_checkbutton_var)
+    history_checkbutton.grid(row=0, column=0, sticky="w", padx=(0,20))
 
-    # Case à cocher pour définir le profil par défaut
+    # Case à cocher pour définir le profil par défaut - colonne 1
     default_profile_var = tk.BooleanVar(value=False)
-    default_profile_checkbutton = ttk.Checkbutton(scrollable_frame, text="Défaut", variable=default_profile_var)
-    default_profile_checkbutton.grid(row=13, column=0, columnspan=2, sticky="w", pady=3, padx=(10,5))
+    default_profile_checkbutton = ttk.Checkbutton(checkboxes_frame, text="Défaut", variable=default_profile_var)
+    default_profile_checkbutton.grid(row=0, column=1, sticky="w")
 
-    # Commande curl - Textarea multi-lignes
+    # Commande curl - Textarea multi-lignes - RAPPROCHÉ DES CHECKBOXES
     curl_exe_label = ttk.Label(scrollable_frame, text="Commande curl :")
-    curl_exe_label.grid(row=14, column=0, sticky="nw", pady=3, padx=(10,5))
+    curl_exe_label.grid(row=13, column=0, sticky="nw", pady=(1,3), padx=(10,5))  # Très peu d'espace en haut
     
     # Frame pour le textarea avec scrollbar
     curl_frame = ttk.Frame(scrollable_frame)
-    curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    curl_frame.grid(row=13, column=1, columnspan=2, sticky="ew", pady=(1,3), padx=(0,10))  # Très peu d'espace en haut
     curl_frame.grid_columnconfigure(0, weight=1)
     
     # Textarea avec scrollbar verticale
@@ -2192,13 +2304,10 @@ print("Template native à implémenter pour {provider}")
         """Met à jour le contenu du Text widget"""
         curl_exe_text.delete(1.0, tk.END)
         curl_exe_text.insert(1.0, value)
-        original_set(value)  # Utiliser la méthode originale pour éviter la récursion
     
     def get_curl_text():
         """Récupère le contenu du Text widget"""
-        content = curl_exe_text.get(1.0, tk.END).rstrip('\n')
-        original_set(content)  # Utiliser la méthode originale
-        return content
+        return curl_exe_text.get(1.0, tk.END).rstrip('\n')
     
     # Redéfinir les méthodes de la StringVar pour utiliser le Text widget
     original_set = curl_exe_var.set
@@ -2210,19 +2319,9 @@ print("Template native à implémenter pour {provider}")
     profil_defaut = charger_profil_defaut()
     if profil_defaut:
         donnees_profil = charger_donnees_profil(profil_defaut)
-        # NE PAS charger api_url - sera géré par les placeholders template
-        # api_url_var.set(donnees_profil.get("api_url", ""))  # COMMENTÉ: cause confusion URL/USER_PROMPT
-        api_key_var.set(donnees_profil.get("api_key", ""))
-        role_var.set(donnees_profil.get("role", ""))
-        default_behavior_var.set(donnees_profil.get("behavior", ""))
-        history_checkbutton_var.set(donnees_profil.get("history", False))
-        default_profile_var.set(donnees_profil.get("default", False))
-        replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
         
-        # Charger les nouveaux champs placeholder
-        placeholder_model_var.set(donnees_profil.get("placeholder_model", ""))
-        placeholder_role_var.set(donnees_profil.get("placeholder_role", ""))
-        placeholder_behavior_var.set(donnees_profil.get("placeholder_behavior", ""))
+        # Utiliser la fonction helper pour le nouveau mapping
+        chat_data = charger_donnees_avec_nouveau_mapping(donnees_profil)
         
         # Charger le template selon la méthode sélectionnée
         template_id = donnees_profil.get("template_id", "")
@@ -2244,11 +2343,11 @@ print("Template native à implémenter pour {provider}")
                 if "placeholder_model" in valeurs_defaut:
                     placeholder_model_var.set(valeurs_defaut["placeholder_model"])
                 if "placeholder_user_prompt" in valeurs_defaut:
-                    api_url_var.set(valeurs_defaut["placeholder_user_prompt"])
+                    user_prompt_var.set(valeurs_defaut["placeholder_user_prompt"])
                 if "placeholder_role" in valeurs_defaut:
                     placeholder_role_var.set(valeurs_defaut["placeholder_role"])
                 if "placeholder_behavior" in valeurs_defaut:
-                    placeholder_behavior_var.set(valeurs_defaut["placeholder_behavior"])
+                    set_behavior_text(valeurs_defaut["placeholder_behavior"])  # Utiliser la fonction pour Text widget
                 if "placeholder_api_key" in valeurs_defaut:
                     replace_apikey_var.set(valeurs_defaut["placeholder_api_key"])
         
@@ -2303,16 +2402,16 @@ print("Template native à implémenter pour {provider}")
         # Mettre à jour seulement les champs modifiés par l'utilisateur
         config_data.update({
             "name": profil_selectionne,
-            "api_url": api_url_entry.get(),
+            "user_prompt": user_prompt_entry.get(),
             "api_key": api_key_entry.get().strip(),
             "role": role_entry.get(),
-            "behavior": default_behavior_entry.get(),
+            "behavior": get_default_behavior_text(),  # Utiliser la fonction pour Text widget
             "history": history_checkbutton_var.get(),
             "default": default_profile_var.get(),
             "replace_apikey": replace_apikey_var.get(),
             "placeholder_model": placeholder_model_var.get(),
             "placeholder_role": placeholder_role_var.get(),
-            "placeholder_behavior": placeholder_behavior_var.get(),
+            "placeholder_behavior": get_behavior_text(),  # Utiliser la fonction pour Text widget
             "template_id": f"{profil_selectionne.lower()}_chat",
             "method": selected_method.get(),  # Nouveau champ V2
             "template_type": selected_template_type.get(),  # Nouveau champ V2
@@ -2387,21 +2486,15 @@ print("Template native à implémenter pour {provider}")
     
     # Espacement supplémentaire en bas pour assurer la visibilité des boutons
     spacer_bottom = ttk.Label(scrollable_frame, text="")
-    spacer_bottom.grid(row=13, column=0, columnspan=3, pady=20)
+    spacer_bottom.grid(row=14, column=0, columnspan=3, pady=20)  # Ligne 14 au lieu de 13
 
     # Charger les données du profil par défaut au démarrage (sans event)
     try:
         profil_selectionne = selected_model.get()
         donnees_profil = charger_donnees_profil(profil_selectionne)
         
-        # NE PAS charger api_url - sera géré par les placeholders template  
-        # api_url_var.set(donnees_profil.get("api_url", ""))  # COMMENTÉ: cause confusion URL/USER_PROMPT
-        api_key_var.set(donnees_profil.get("api_key", ""))
-        role_var.set(donnees_profil.get("role", ""))
-        default_behavior_var.set(donnees_profil.get("behavior", ""))
-        history_checkbutton_var.set(donnees_profil.get("history", False))
-        default_profile_var.set(donnees_profil.get("default", False))
-        replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
+        # Utiliser la fonction helper pour le nouveau mapping
+        chat_data = charger_donnees_avec_nouveau_mapping(donnees_profil)
         
         # Charger le template selon la méthode sélectionnée
         template_id = donnees_profil.get("template_id", "")
@@ -2431,9 +2524,9 @@ print("Template native à implémenter pour {provider}")
     except Exception as e:
         print(f"[DEBUG] Erreur lors du chargement initial du profil par défaut Setup API: {e}")
         # Valeurs par défaut de sécurité
-        api_url_var.set("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent")
+        user_prompt_var.set("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent")
         role_var.set("assistant IA")
-        default_behavior_var.set("utile et informatif")
+        set_default_behavior_text("utile et informatif")  # Utiliser la fonction pour Text widget
 
 def open_setup_file_menu():
     """Ouvre le formulaire de configuration de génération de fichiers."""
@@ -2750,8 +2843,7 @@ def open_setup_history_menu():
                 print(f"[DEBUG] Erreur détection template pour {profile_name}: {e}")
                 template_id = "gemini_chat"  # Fallback de sécurité
             
-            # ORCHESTRATION COMPLÈTE avec mise à jour dynamique dans le bon scope
-            update_form_with_llm_data(template_id)
+            print(f"[DEBUG] Template détecté pour Setup History: {template_id}")
     
     auto_save_var = tk.BooleanVar(value=True)
     

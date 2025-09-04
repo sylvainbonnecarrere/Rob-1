@@ -1,17 +1,24 @@
 {
   "name": "Kimi",
-  "api_url": "https://api.aimlapi.com/v1/chat/completions",
-  "api_key": "YOUR_KIMI_API_KEY_HERE",
-  "role": "Assistant",
-  "behavior": "Assistant IA conversationnel avec capacités de recherche web intégrées",
-  "history": false,
-  "default": false,
-  "replace_apikey": "$OPENROUTER_API_KEY",
-  "template_id": "kimi_chat",
-  "method": "curl",
-  "template_type": "chat",
-  "llm_model": "gemini-2.5-flash",
-  "response_path": ["choices", 0, "message", "content"],
+  "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "moonshotai/kimi-k2",
+      "api_key": "XXXX",                    
+      "role": "Instructeur Strict",        
+      "behavior": "minutieux, éthique, 4 phrases max.", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "moonshotai/kimi-k2",      
+      "placeholder_api_key": "$OPENROUTER_API_KEY",     
+      "placeholder_role": "I'm not sure",         
+      "placeholder_behavior": "but my best guess is", 
+      "placeholder_user_prompt": "What is the best French Cheese?"     
+    },
+      "response_path": ["choices", 0, "message", "content"]
+  },
   "file_generation": {
     "enabled": false,
     "mode": "simple",

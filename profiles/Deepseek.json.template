@@ -1,17 +1,24 @@
 {
   "name": "Deepseek",
-  "api_url": "https://openrouter.ai/api/v1/chat/completions",
-  "api_key": "YOUR_OPENROUTER_API_KEY_HERE",
-  "role": "",
-  "behavior": "",
-  "history": true,
-  "default": false,
-  "replace_apikey": "OPENROUTER_API_KEY",
-  "template_id": "deepseek_chat",
-  "method": "curl",
-  "template_type": "chat",
-  "llm_model": "deepseek-chat",
-  "response_path": ["choices", 0, "message", "content"],
+    "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
+      "api_key": "XXXX",                    
+      "role": "Instructeur Rigolo",        
+      "behavior": "synthétique, 4 phrases max.", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "deepseek/deepseek-r1-0528-qwen3-8b:free",      
+      "placeholder_api_key": "$YOUR_OPENROUTER_API_KEY_HERE",     
+      "placeholder_role": "Assistant",         
+      "placeholder_behavior": "You are a helpful developer", 
+      "placeholder_user_prompt": "What is the meaning of life?"     
+    },
+    "response_path": ["choices", 0, "message", "content"]
+  },
   "conversation_management": {
     "words_enabled": true,
     "sentences_enabled": true,

@@ -1,6 +1,35 @@
 {
   "name": "Grok",
-  "api_url": "https://api.x.ai/v1/chat/completions",
+  "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "grok-4",
+      "api_key": "XXXX",                    
+      "role": "Instructeur pédagogique",        
+      "behavior": "synthétique, 4 phrases max.", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "grok-4",      
+      "placeholder_api_key": "$XAI_API_KEY",     
+      "placeholder_role": "You are Grok",         
+      "placeholder_behavior": "a highly intelligent, helpful AI assistant", 
+      "placeholder_user_prompt": "What is the best French Cheese?"     
+    },
+      "response_path": ["choices", 0, "message", "content"]
+  },
+  "conversation_management": {
+    "words_enabled": true,
+    "sentences_enabled": true,
+    "tokens_enabled": false,
+    "word_threshold": 300,
+    "sentence_threshold": 10,
+    "token_threshold": 1000,
+    "summary_template": "Template Gemini",
+    "custom_instructions": "Résume la conversation précédente en conservant les points clés et le contexte important.",
+    "auto_save": true
+  },
   "api_key": "YOUR_GROK_API_KEY_HERE",
   "role": "",
   "behavior": "",
@@ -11,7 +40,7 @@
   "method": "curl",
   "template_type": "chat",
   "llm_model": "grok-beta",
-  "response_path": ["choices", 0, "message", "content"],
+
   "conversation": {
     "enabled": true,
     "max_context_length": 4000,

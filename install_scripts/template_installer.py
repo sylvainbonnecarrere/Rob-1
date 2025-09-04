@@ -223,7 +223,7 @@ if __name__ == "__main__":
     # Élimination des données hardcodées pour éviter les incohérences et les champs manquants
     # ConfigManager.create_default_profiles() gère toute l'initialisation depuis les templates
     
-    def __init__(self, config_manager: Optional[ConfigManager] = None):
+    def __init__(self, config_manager=None):
         """
         Initialise l'installateur de templates
         
@@ -320,7 +320,7 @@ if __name__ == "__main__":
             bool: True si une mise à jour est nécessaire
         """
         # Vérifier les champs critiques pour les mises à jour
-        critical_fields = ["method", "template_type", "llm_model", "api_url"]
+        critical_fields = ["method", "template_type", "llm_model"]
         
         for field in critical_fields:
             if existing.get(field) != new.get(field):

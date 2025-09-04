@@ -1,17 +1,24 @@
 {
   "name": "Qwen",
-  "api_url": "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
-  "api_key": "YOUR_QWEN_API_KEY_HERE",
-  "role": "",
-  "behavior": "",
-  "history": true,
-  "default": false,
-  "replace_apikey": "DASHSCOPE_API_KEY",
-  "template_id": "qwen_chat",
-  "method": "curl",
-  "template_type": "chat",
-  "llm_model": "qwen-plus",
-  "response_path": ["output", "text"],
+  "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "qwen/qwen3-30b-a3b-instruct-2507",
+      "api_key": "XXXX",                    
+      "role": "Instructeur Rigolo",        
+      "behavior": "synthétique, 4 phrases max.", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "qwen/qwen3-30b-a3b-instruct-2507",      
+      "placeholder_api_key": "YOUR_QWEN_API_KEY_HERE",     
+      "placeholder_role": "I'm not sure",         
+      "placeholder_behavior": "but my best guess is", 
+      "placeholder_user_prompt": "What is the meaning of life?"     
+    },
+    "response_path": ["output", "text"]
+  },
   "conversation_management": {
     "words_enabled": true,
     "sentences_enabled": true,
