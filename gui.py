@@ -1315,8 +1315,8 @@ def open_setup_menu():
     screen_width = setup_window.winfo_screenwidth()
     screen_height = setup_window.winfo_screenheight()
     
-    # Taille optimale : augmentée de 25% pour plus d'espace
-    optimal_width = min(760, int(screen_width * 0.80))  # Augmenté de 610 à 760 (+25%)
+    # Taille optimale : largeur fixée à 1000 pixels
+    optimal_width = min(1000, int(screen_width * 0.80))  # Largeur fixée à 1000px
     optimal_height = min(750, int(screen_height * 0.80))  # Augmenté de 600 à 750 (+25%)
     
     # Centrer la fenêtre
@@ -1325,11 +1325,15 @@ def open_setup_menu():
     
     setup_window.geometry(f"{optimal_width}x{optimal_height}+{x}+{y}")
     setup_window.resizable(True, True)
-    setup_window.minsize(650, 690)  # Taille minimale ajustée proportionnellement (+25%)
+    setup_window.minsize(900, 690)  # Taille minimale ajustée pour largeur 1000
+    
+    # Frame principal pour organiser le contenu
+    main_frame = ttk.Frame(setup_window)
+    main_frame.pack(fill="both", expand=True, padx=5, pady=5)  # Réduire padx de 10 à 5
     
     # Créer un canvas avec scrollbar pour gérer la hauteur
-    canvas = tk.Canvas(setup_window)
-    scrollbar = ttk.Scrollbar(setup_window, orient="vertical", command=canvas.yview)
+    canvas = tk.Canvas(main_frame)
+    scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
     scrollable_frame = ttk.Frame(canvas)
     
     scrollable_frame.bind(
@@ -1358,8 +1362,10 @@ def open_setup_menu():
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
     
-    # Configurer les colonnes pour une meilleure répartition
-    scrollable_frame.grid_columnconfigure(1, weight=1)
+    # Configurer les colonnes pour une meilleure répartition et éviter débordement
+    scrollable_frame.grid_columnconfigure(0, weight=0, minsize=150)  # Colonne labels : largeur fixe
+    scrollable_frame.grid_columnconfigure(1, weight=1, minsize=250)  # Colonne champs : flexible mais limitée
+    scrollable_frame.grid_columnconfigure(2, weight=0, minsize=50)   # Colonne extra : petite
 
     # Fonction pour charger les profils disponibles
     def charger_profils():
@@ -1440,13 +1446,17 @@ def open_setup_menu():
         user_prompt_var.set(placeholders_data.get("placeholder_user_prompt", ""))
         replace_apikey_var.set(placeholders_data.get("placeholder_api_key", ""))
         
+        # 3. RESPONSE_PATH (depuis chat.response_path)
+        response_path = chat_data.get("response_path", ["candidates", 0, "content", "parts", 0, "text"])
+        set_response_path_text(response_path)
+        
         print(f"[DEBUG] Placeholders chargés:")
         print(f"  - placeholder_model_var: {placeholder_model_var.get()}")
         print(f"  - placeholder_role_var: {placeholder_role_var.get()}")
         print(f"  - user_prompt_var: {user_prompt_var.get()}")
         print(f"  - replace_apikey_var: {replace_apikey_var.get()}")
         
-        # 3. FALLBACK: Support ancien format pour compatibilité
+        # 4. FALLBACK: Support ancien format pour compatibilité
         if not chat_data:
             print(f"[DEBUG] Ancien format détecté, utilisation format legacy")
             api_key_var.set(donnees_profil.get("api_key", ""))
@@ -1456,6 +1466,8 @@ def open_setup_menu():
             default_profile_var.set(donnees_profil.get("default", False))
             replace_apikey_var.set(donnees_profil.get("replace_apikey", ""))
             selected_llm_model.set(donnees_profil.get("llm_model", ""))
+            # Response path par défaut pour ancien format
+            set_response_path_text(["candidates", 0, "content", "parts", 0, "text"])
         
         return chat_data
 
@@ -1767,19 +1779,19 @@ print("Template native à implémenter pour {provider}")
 
     # Choix du provider (liste déroulante des profils existants)
     provider_label = ttk.Label(scrollable_frame, text="Provider LLM :")
-    provider_label.grid(row=0, column=0, sticky="w", pady=3, padx=(10,5))
+    provider_label.grid(row=0, column=0, sticky="w", pady=(0, 1), padx=(5, 5))  # Coller en haut
     selected_model = tk.StringVar(value=charger_profil_defaut())
-    model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_model, values=charger_profils())
-    model_combobox.grid(row=0, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_model, values=charger_profils(), width=60)
+    model_combobox.grid(row=0, column=1, columnspan=2, sticky="w", pady=(0, 1), padx=(0, 5))  # Coller en haut
     model_combobox.bind("<<ComboboxSelected>>", mettre_a_jour_champs)
 
     # Méthode de connexion
     method_label = ttk.Label(scrollable_frame, text="Méthode :")
-    method_label.grid(row=1, column=0, sticky="w", pady=3, padx=(10,5))
+    method_label.grid(row=1, column=0, sticky="w", pady=1, padx=(5,5))
     selected_method = tk.StringVar(value="curl")
     method_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_method, 
-                                   values=["curl", "native"], state="readonly")
-    method_combobox.grid(row=1, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+                                   values=["curl", "native"], state="readonly", width=60)
+    method_combobox.grid(row=1, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
     
     # Fonction pour mettre à jour l'affichage selon la méthode
     def update_method_fields(*args):
@@ -1787,15 +1799,15 @@ print("Template native à implémenter pour {provider}")
         if method == "curl":
             # Mode curl : afficher les champs curl
             # NOTE: Le texte du label sera géré par creer_champs_dynamiques()
-            curl_exe_label.grid(row=13, column=0, sticky="nw", pady=5, padx=(10,5))
-            curl_frame.grid(row=13, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+            curl_exe_label.grid(row=15, column=0, sticky="nw", pady=5, padx=(10,5))
+            curl_frame.grid(row=15, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
             curl_exe_label.config(text="Commande Curl :")
             placeholder_command_label.config(text="Placeholder Command (curl_basic.txt) :")
         elif method == "native":
             # Mode native : afficher le template Python
             user_prompt_label.config(text="Paramètres template :")
-            curl_exe_label.grid(row=13, column=0, sticky="nw", pady=5, padx=(10,5))
-            curl_frame.grid(row=13, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+            curl_exe_label.grid(row=15, column=0, sticky="nw", pady=5, padx=(10,5))
+            curl_frame.grid(row=15, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
             curl_exe_label.config(text="Template Python Native :")
             placeholder_command_label.config(text="Placeholder Command (native_basic.py) :")
         
@@ -1813,18 +1825,20 @@ print("Template native à implémenter pour {provider}")
 
     # Type de template
     template_type_label = ttk.Label(scrollable_frame, text="Type Template :")
-    template_type_label.grid(row=2, column=0, sticky="w", pady=3, padx=(10,5))
+    template_type_label.grid(row=2, column=0, sticky="w", pady=1, padx=(5,5))
     selected_template_type = tk.StringVar(value="chat")
     template_type_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_template_type,
-                                          values=["chat", "completion (futur)", "embedding (futur)"], state="readonly")
-    template_type_combobox.grid(row=2, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+                                          values=["chat", "completion (futur)", "embedding (futur)"], 
+                                          state="readonly", width=60)
+    template_type_combobox.grid(row=2, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Modèle LLM spécifique
     llm_model_label = ttk.Label(scrollable_frame, text="Modèle LLM :")
-    llm_model_label.grid(row=3, column=0, sticky="w", pady=3, padx=(10,5))
+    llm_model_label.grid(row=3, column=0, sticky="w", pady=1, padx=(5,5))
     selected_llm_model = tk.StringVar(value="")
-    llm_model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_llm_model, state="readonly")
-    llm_model_combobox.grid(row=3, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    llm_model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_llm_model, 
+                                      state="readonly", width=60)
+    llm_model_combobox.grid(row=3, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Fonction pour charger les modèles depuis un fichier JSON
     def load_models_from_json(provider, template_type="chat"):
@@ -2206,7 +2220,7 @@ print("Template native à implémenter pour {provider}")
             },
             "SYSTEM_PROMPT_BEHAVIOR": {
                 "label": placeholder_behavior_label,
-                "entry": placeholder_behavior_text,  # Widget Text au lieu d'Entry
+                "entry": placeholder_behavior_entry,  # Widget Entry
                 "var": placeholder_behavior_var,
                 "row": 8,
                 "text": "Placeholder Comportement :",
@@ -2308,41 +2322,41 @@ print("Template native à implémenter pour {provider}")
 
     # Placeholder Modèle LLM
     placeholder_model_label = ttk.Label(scrollable_frame, text="Placeholder Modèle LLM :")
-    placeholder_model_label.grid(row=4, column=0, sticky="w", pady=3, padx=(10,5))
+    placeholder_model_label.grid(row=4, column=0, sticky="w", pady=1, padx=(5,5))
     placeholder_model_var = tk.StringVar(value="")
-    placeholder_model_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_model_var)
-    placeholder_model_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    placeholder_model_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_model_var, width=60)
+    placeholder_model_entry.grid(row=4, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Champs pour les placeholders - CORRECTION ARCHITECTE
     # Champ Rôle
     role_label = ttk.Label(scrollable_frame, text="Rôle :")
-    role_label.grid(row=5, column=0, sticky="w", pady=3, padx=(10,5))
+    role_label.grid(row=5, column=0, sticky="w", pady=1, padx=(5,5))
     role_var = tk.StringVar(value="")
-    role_entry = ttk.Entry(scrollable_frame, textvariable=role_var)
-    role_entry.grid(row=5, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    role_entry = ttk.Entry(scrollable_frame, textvariable=role_var, width=60)
+    role_entry.grid(row=5, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Placeholder Rôle
     placeholder_role_label = ttk.Label(scrollable_frame, text="Placeholder Rôle :")
-    placeholder_role_label.grid(row=6, column=0, sticky="w", pady=3, padx=(10,5))
+    placeholder_role_label.grid(row=6, column=0, sticky="w", pady=1, padx=(5,5))
     placeholder_role_var = tk.StringVar(value="")
-    placeholder_role_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_role_var)
-    placeholder_role_entry.grid(row=6, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    placeholder_role_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_role_var, width=60)
+    placeholder_role_entry.grid(row=6, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Comportement Enregistré - Textarea avec 3 lignes et scrollbar
     default_behavior_label = ttk.Label(scrollable_frame, text="Comportement par Défaut :")
-    default_behavior_label.grid(row=7, column=0, sticky="nw", pady=3, padx=(10,5))
+    default_behavior_label.grid(row=7, column=0, sticky="nw", pady=1, padx=(5,5))
     
     # Frame pour le textarea avec scrollbar
     default_behavior_frame = ttk.Frame(scrollable_frame)
-    default_behavior_frame.grid(row=7, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
-    default_behavior_frame.grid_columnconfigure(0, weight=1)
+    default_behavior_frame.grid(row=7, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
+    default_behavior_frame.grid_columnconfigure(0, weight=0)
     
-    # Textarea avec scrollbar verticale (3 lignes)
-    default_behavior_text = tk.Text(default_behavior_frame, height=3, width=50, wrap=tk.WORD)
+    # Textarea avec scrollbar verticale (3 lignes) - largeur uniforme
+    default_behavior_text = tk.Text(default_behavior_frame, height=3, width=60, wrap=tk.WORD)
     default_behavior_scrollbar = ttk.Scrollbar(default_behavior_frame, orient="vertical", command=default_behavior_text.yview)
     default_behavior_text.configure(yscrollcommand=default_behavior_scrollbar.set)
     
-    default_behavior_text.grid(row=0, column=0, sticky="ew")
+    default_behavior_text.grid(row=0, column=0, sticky="w")
     default_behavior_scrollbar.grid(row=0, column=1, sticky="ns")
     
     # Variable pour compatibilité avec le code existant
@@ -2365,59 +2379,44 @@ print("Template native à implémenter pour {provider}")
     default_behavior_text.bind('<KeyRelease>', on_default_behavior_text_change)
     default_behavior_text.bind('<Button-1>', on_default_behavior_text_change)
 
-    # Placeholder Comportement - Textarea avec 3 lignes SANS scrollbar pour test
+    # Placeholder Comportement - Entry simple sur 1 ligne
     placeholder_behavior_label = ttk.Label(scrollable_frame, text="Placeholder Comportement :")
     placeholder_behavior_label.grid(row=8, column=0, sticky="nw", pady=3, padx=(10,5))
     
-    # Textarea simple sans scrollbar pour éliminer le scrollbar orphelin
-    placeholder_behavior_text = tk.Text(scrollable_frame, height=3, width=50, wrap=tk.WORD)
-    placeholder_behavior_text.grid(row=8, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
-    
-    # Variable pour compatibilité avec le code existant
+    # Entry simple au lieu de Text widget multi-lignes
     placeholder_behavior_var = tk.StringVar(value="")
+    placeholder_behavior_entry = ttk.Entry(scrollable_frame, textvariable=placeholder_behavior_var, width=60)
+    placeholder_behavior_entry.grid(row=8, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
     
-    # Fonctions helper pour synchroniser StringVar avec Text widget
+    # Fonctions helper pour compatibilité avec le code existant
     def set_behavior_text(value):
-        """Met à jour le contenu du Text widget"""
-        placeholder_behavior_text.delete(1.0, tk.END)
-        placeholder_behavior_text.insert(1.0, value)
+        placeholder_behavior_var.set(value)
     
-    def get_behavior_text():
-        """Récupère le contenu du Text widget"""
-        return placeholder_behavior_text.get(1.0, tk.END).strip()
-    
-    # Synchroniser avec StringVar pour compatibilité
-    def on_behavior_text_change(*args):
-        placeholder_behavior_var.set(get_behavior_text())
-    
-    placeholder_behavior_text.bind('<KeyRelease>', on_behavior_text_change)
-    placeholder_behavior_text.bind('<Button-1>', on_behavior_text_change)
-
     # Placeholder User Prompt
     user_prompt_label = ttk.Label(scrollable_frame, text="Placeholder User Prompt :")
-    user_prompt_label.grid(row=9, column=0, sticky="w", pady=3, padx=(10,5))
+    user_prompt_label.grid(row=9, column=0, sticky="w", pady=1, padx=(5,5))
     user_prompt_var = tk.StringVar(value="")
-    user_prompt_entry = ttk.Entry(scrollable_frame, textvariable=user_prompt_var, width=50)
-    user_prompt_entry.grid(row=9, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    user_prompt_entry = ttk.Entry(scrollable_frame, textvariable=user_prompt_var, width=60)
+    user_prompt_entry.grid(row=9, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Clé API
     api_key_label = ttk.Label(scrollable_frame, text="Clé API :")
-    api_key_label.grid(row=10, column=0, sticky="w", pady=3, padx=(10,5))
+    api_key_label.grid(row=10, column=0, sticky="w", pady=1, padx=(5,5))
     api_key_var = tk.StringVar(value="")
-    api_key_entry = ttk.Entry(scrollable_frame, textvariable=api_key_var, show="*")
-    api_key_entry.grid(row=10, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    api_key_entry = ttk.Entry(scrollable_frame, textvariable=api_key_var, show="*", width=60)
+    api_key_entry.grid(row=10, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Placeholder Clé API - DIRECTEMENT SOUS CLÉ API
     replace_apikey_label = ttk.Label(scrollable_frame, text="Placeholder Clé API :")
-    replace_apikey_label.grid(row=11, column=0, sticky="w", pady=3, padx=(10,5))
+    replace_apikey_label.grid(row=11, column=0, sticky="w", pady=1, padx=(5,5))
     replace_apikey_var = tk.StringVar(value="")
-    replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var)
-    replace_apikey_entry.grid(row=11, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
+    replace_apikey_entry = ttk.Entry(scrollable_frame, textvariable=replace_apikey_var, width=60)
+    replace_apikey_entry.grid(row=11, column=1, columnspan=2, sticky="w", pady=1, padx=(0,5))
 
     # Checkboxes Historique et Défaut sur la même ligne
     # Frame pour contenir les checkboxes côte à côte
     checkboxes_frame = ttk.Frame(scrollable_frame)
-    checkboxes_frame.grid(row=12, column=0, columnspan=3, sticky="ew", pady=(3,1), padx=(10,10))  # Très peu d'espace en bas
+    checkboxes_frame.grid(row=12, column=0, columnspan=3, sticky="ew", pady=(2,1), padx=(5,5))  # Réduire espacement
     
     # Historique - colonne 0
     history_checkbutton_var = tk.BooleanVar(value=False)
@@ -2429,21 +2428,68 @@ print("Template native à implémenter pour {provider}")
     default_profile_checkbutton = ttk.Checkbutton(checkboxes_frame, text="Défaut", variable=default_profile_var)
     default_profile_checkbutton.grid(row=0, column=1, sticky="w")
 
-    # Commande curl - Textarea multi-lignes - RAPPROCHÉ DES CHECKBOXES
+    # Champ Structure réponse - Textarea 2 lignes
+    response_path_label = ttk.Label(scrollable_frame, text="Structure réponse :")
+    response_path_label.grid(row=13, column=0, sticky="nw", pady=(2,1), padx=(5,5))
+    
+    # Frame pour le textarea avec scrollbar
+    response_path_frame = ttk.Frame(scrollable_frame)
+    response_path_frame.grid(row=13, column=1, columnspan=2, sticky="w", pady=(2,1), padx=(0,5))
+    response_path_frame.grid_columnconfigure(0, weight=0)
+    
+    # Textarea avec scrollbar verticale - largeur uniforme
+    response_path_text = tk.Text(response_path_frame, height=2, width=60, wrap="word")
+    response_path_scrollbar = ttk.Scrollbar(response_path_frame, orient="vertical", command=response_path_text.yview)
+    response_path_text.configure(yscrollcommand=response_path_scrollbar.set)
+    
+    response_path_text.grid(row=0, column=0, sticky="w")
+    response_path_scrollbar.grid(row=0, column=1, sticky="ns")
+
+    # Fonction pour récupérer le contenu du champ response_path
+    def get_response_path_text():
+        """Récupère le contenu du Text widget response_path"""
+        content = response_path_text.get(1.0, tk.END).strip()
+        if content:
+            try:
+                # Essayer de parser comme JSON si ça ressemble à un array
+                if content.startswith('[') and content.endswith(']'):
+                    import json
+                    return json.loads(content)
+                else:
+                    # Sinon traiter comme une chaîne de chemin (ex: "candidates.0.content.parts.0.text")
+                    return content.replace('.', ',').split(',')
+            except:
+                # En cas d'erreur, traiter comme une simple chaîne
+                return content.split(',') if ',' in content else [content]
+        return ["candidates", 0, "content", "parts", 0, "text"]  # Valeur par défaut
+    
+    # Fonction pour définir le contenu du champ response_path
+    def set_response_path_text(value):
+        """Met à jour le contenu du Text widget response_path"""
+        response_path_text.delete(1.0, tk.END)
+        if isinstance(value, list):
+            # Convertir la liste en format lisible
+            import json
+            display_value = json.dumps(value, ensure_ascii=False)
+        else:
+            display_value = str(value)
+        response_path_text.insert(1.0, display_value)
+
+    # Commande curl - Textarea multi-lignes - RAPPROCHÉ DU CHAMP RESPONSE_PATH
     curl_exe_label = ttk.Label(scrollable_frame, text="Commande curl :")
-    curl_exe_label.grid(row=13, column=0, sticky="nw", pady=(1,3), padx=(10,5))  # Très peu d'espace en haut
+    curl_exe_label.grid(row=15, column=0, sticky="nw", pady=(1,3), padx=(5,5))  # Décalé à la ligne 15
     
     # Frame pour le textarea avec scrollbar
     curl_frame = ttk.Frame(scrollable_frame)
-    curl_frame.grid(row=13, column=1, columnspan=2, sticky="ew", pady=(1,3), padx=(0,10))  # Très peu d'espace en haut
-    curl_frame.grid_columnconfigure(0, weight=1)
+    curl_frame.grid(row=15, column=1, columnspan=2, sticky="w", pady=(1,3), padx=(0,5))  # Décalé à la ligne 15
+    curl_frame.grid_columnconfigure(0, weight=0)
     
-    # Textarea avec scrollbar verticale
-    curl_exe_text = tk.Text(curl_frame, height=5, width=50, wrap=tk.WORD)
+    # Textarea avec scrollbar verticale - largeur uniforme
+    curl_exe_text = tk.Text(curl_frame, height=5, width=60, wrap=tk.WORD)
     curl_exe_scrollbar = ttk.Scrollbar(curl_frame, orient="vertical", command=curl_exe_text.yview)
     curl_exe_text.configure(yscrollcommand=curl_exe_scrollbar.set)
     
-    curl_exe_text.grid(row=0, column=0, sticky="ew")
+    curl_exe_text.grid(row=0, column=0, sticky="w")
     curl_exe_scrollbar.grid(row=0, column=1, sticky="ns")
     
     # Variable pour compatibilité avec le code existant
@@ -2500,19 +2546,19 @@ print("Template native à implémenter pour {provider}")
 
     # Placeholder Command - Nouveau champ sous la commande curl
     placeholder_command_label = ttk.Label(scrollable_frame, text="Placeholder Command :")
-    placeholder_command_label.grid(row=14, column=0, sticky="nw", pady=(1,3), padx=(10,5))
+    placeholder_command_label.grid(row=14, column=0, sticky="nw", pady=(1,3), padx=(5,5))
     
     # Frame pour le textarea avec scrollbar
     placeholder_command_frame = ttk.Frame(scrollable_frame)
-    placeholder_command_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=(1,3), padx=(0,10))
-    placeholder_command_frame.grid_columnconfigure(0, weight=1)
+    placeholder_command_frame.grid(row=14, column=1, columnspan=2, sticky="w", pady=(1,3), padx=(0,5))
+    placeholder_command_frame.grid_columnconfigure(0, weight=0)
     
-    # Textarea avec scrollbar verticale
-    placeholder_command_text = tk.Text(placeholder_command_frame, height=5, width=50, wrap=tk.WORD)
+    # Textarea avec scrollbar verticale - largeur uniforme
+    placeholder_command_text = tk.Text(placeholder_command_frame, height=5, width=60, wrap=tk.WORD)
     placeholder_command_scrollbar = ttk.Scrollbar(placeholder_command_frame, orient="vertical", command=placeholder_command_text.yview)
     placeholder_command_text.configure(yscrollcommand=placeholder_command_scrollbar.set)
     
-    placeholder_command_text.grid(row=0, column=0, sticky="ew")
+    placeholder_command_text.grid(row=0, column=0, sticky="w")
     placeholder_command_scrollbar.grid(row=0, column=1, sticky="ns")
     
     # Variable pour compatibilité avec le code existant
@@ -2652,12 +2698,15 @@ print("Template native à implémenter pour {provider}")
             "placeholder_model": placeholder_model_var.get(),
             "placeholder_api_key": replace_apikey_var.get(),
             "placeholder_role": placeholder_role_var.get(),
-            "placeholder_behavior": get_behavior_text(),  # Utiliser la fonction pour Text widget
+            "placeholder_behavior": placeholder_behavior_var.get(),
             "placeholder_user_prompt": user_prompt_var.get()  # Corriger: utiliser user_prompt_var au lieu de user_prompt_entry
         })
         
         # Mettre à jour la méthode et type de template
         config_data["chat"]["method"] = selected_method.get()
+        
+        # Mettre à jour le response_path depuis le champ de l'interface
+        config_data["chat"]["response_path"] = get_response_path_text()
         
         # Données générales du profil (niveau racine)
         config_data.update({
@@ -2757,19 +2806,15 @@ print("Template native à implémenter pour {provider}")
         
         return template
 
-    # Frame pour disposer les boutons côte à côte
+    # Frame pour disposer les boutons côte à côte - dans le cadre scrollable, en bas
     boutons_frame = ttk.Frame(scrollable_frame)
-    boutons_frame.grid(row=15, column=0, columnspan=3, pady=(20,40), padx=(10,10))
+    boutons_frame.grid(row=16, column=0, columnspan=3, pady=(10, 5), padx=(5, 5), sticky="ew")
     
     bouton_enregistrer = ttk.Button(boutons_frame, text="Enregistrer", command=enregistrer_configuration)
     bouton_enregistrer.pack(side="left", padx=(0, 10))
 
     bouton_annuler = ttk.Button(boutons_frame, text="Annuler", command=setup_window.destroy)
     bouton_annuler.pack(side="left")
-    
-    # Espacement supplémentaire en bas pour assurer la visibilité des boutons
-    spacer_bottom = ttk.Label(scrollable_frame, text="")
-    spacer_bottom.grid(row=15, column=0, columnspan=3, pady=20)  # Ligne 15 au lieu de 14
 
     # Charger les données du profil par défaut au démarrage (sans event)
     try:
@@ -3489,9 +3534,9 @@ def open_setup_history_menu():
             import traceback
             traceback.print_exc()
     
-    # === BOUTONS D'ACTION ===
-    button_frame = ttk.Frame(scrollable_frame)
-    button_frame.pack(fill="x", padx=20, pady=20)
+    # === BOUTONS D'ACTION - En bas de la fenêtre, hors du scroll ===
+    button_frame = ttk.Frame(setup_history_window)  # Corriger: setup_history_window
+    button_frame.pack(fill="x", pady=(10, 5))  # Moins d'espace vertical
     
     # Bouton Sauvegarder
     ttk.Button(
@@ -3504,7 +3549,7 @@ def open_setup_history_menu():
     ttk.Button(
         button_frame, 
         text="❌ Annuler", 
-        command=setup_history_window.destroy
+        command=setup_history_window.destroy  # Corriger: setup_history_window
     ).pack(side="left")
     
     # === FONCTIONS D'UPDATE ===
