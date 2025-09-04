@@ -1315,9 +1315,9 @@ def open_setup_menu():
     screen_width = setup_window.winfo_screenwidth()
     screen_height = setup_window.winfo_screenheight()
     
-    # Taille optimale : augmentée pour accommoder le textarea curl
-    optimal_width = min(610, int(screen_width * 0.75))  # Augmenté de 580 à 610 (+5% supplémentaire)
-    optimal_height = min(600, int(screen_height * 0.75))  # Augmenté de 500 à 600
+    # Taille optimale : augmentée de 25% pour plus d'espace
+    optimal_width = min(760, int(screen_width * 0.80))  # Augmenté de 610 à 760 (+25%)
+    optimal_height = min(750, int(screen_height * 0.80))  # Augmenté de 600 à 750 (+25%)
     
     # Centrer la fenêtre
     x = (screen_width // 2) - (optimal_width // 2)
@@ -1325,7 +1325,7 @@ def open_setup_menu():
     
     setup_window.geometry(f"{optimal_width}x{optimal_height}+{x}+{y}")
     setup_window.resizable(True, True)
-    setup_window.minsize(520, 550)  # Taille minimale ajustée proportionnellement
+    setup_window.minsize(650, 690)  # Taille minimale ajustée proportionnellement (+25%)
     
     # Créer un canvas avec scrollbar pour gérer la hauteur
     canvas = tk.Canvas(setup_window)
@@ -1519,6 +1519,80 @@ def open_setup_menu():
         
         print(f"[DEBUG] load_smart_template: {provider} {template_type} {method} (display={for_display})")
         
+        # Charger le template principal selon la méthode
+        if method == 'native':
+            # Mode native : charger native.py
+            try:
+                native_template_path = f"templates/{template_type}/{provider}/native.py"
+                with open(native_template_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    print(f"[DEBUG] Template native.py chargé: {len(content)} caractères")
+                    return content
+            except FileNotFoundError:
+                print(f"[DEBUG] Template native introuvable: {native_template_path}")
+                return f"# Template Python pour {provider} non trouvé"
+            except Exception as e:
+                print(f"[DEBUG] Erreur lecture template native: {e}")
+                return f"# Erreur chargement template Python pour {provider}"
+        
+        else:
+            # Mode curl : utiliser l'APIManager
+            template_id = f"{provider}_{template_type}"
+            try:
+                content = api_manager.get_template_content(template_id)
+                print(f"[DEBUG] Template curl chargé via APIManager: {template_id}")
+                return content
+            except Exception as e:
+                print(f"[DEBUG] Erreur APIManager pour {template_id}: {e}")
+                return f"# Template curl pour {provider} non trouvé"
+
+    def load_basic_template(provider, template_type="chat", method=None):
+        """
+        Charge le fichier _basic correspondant selon la méthode (curl_basic.txt ou native_basic.py)
+        
+        Args:
+            provider: nom du provider (gemini, claude, etc.)
+            template_type: type de template (chat par défaut) 
+            method: méthode (curl/native). Si None, détecte automatiquement
+        
+        Returns:
+            str: contenu du fichier _basic correspondant
+        """
+        # Détection automatique de la méthode si non fournie
+        if method is None:
+            current_provider = selected_model.get().lower()
+            if current_provider == provider:
+                try:
+                    profile_data = charger_donnees_profil(provider.title())
+                    if profile_data:
+                        method = profile_data.get('method', 'curl')
+                    else:
+                        method = selected_method.get()
+                except:
+                    method = selected_method.get()
+            else:
+                method = 'curl'
+        
+        print(f"[DEBUG] load_basic_template: {provider} {template_type} {method}")
+        
+        # Déterminer le fichier basic à charger selon la méthode
+        if method == 'native':
+            basic_file = f"templates/{template_type}/{provider}/native_basic.py"
+        else:
+            basic_file = f"templates/{template_type}/{provider}/curl_basic.txt"
+        
+        try:
+            with open(basic_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                print(f"[DEBUG] Fichier basic chargé: {basic_file} ({len(content)} caractères)")
+                return content
+        except FileNotFoundError:
+            print(f"[DEBUG] Fichier basic introuvable: {basic_file}")
+            return f"# Fichier basic pour {provider} ({method}) non trouvé"
+        except Exception as e:
+            print(f"[DEBUG] Erreur lecture fichier basic: {e}")
+            return f"# Erreur chargement fichier basic pour {provider}"
+        
         if method == "native":
             # Mode native : charger native.py
             if for_display:
@@ -1594,6 +1668,11 @@ print("Template native à implémenter pour {provider}")
         """
         content = load_smart_template(provider, template_type, method, for_display=True)
         curl_exe_var.set(content)
+        
+        # Charger aussi le contenu basic pour le champ "Placeholder Command"
+        basic_content = load_basic_template(provider, template_type, method)
+        placeholder_command_var.set(basic_content)
+        
         return content
 
     def get_execution_template(provider, method, template_type="chat"):
@@ -1671,15 +1750,17 @@ print("Template native à implémenter pour {provider}")
         if method == "curl":
             # Mode curl : afficher les champs curl
             # NOTE: Le texte du label sera géré par creer_champs_dynamiques()
-            curl_exe_label.grid(row=14, column=0, sticky="nw", pady=5, padx=(10,5))
-            curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+            curl_exe_label.grid(row=13, column=0, sticky="nw", pady=5, padx=(10,5))
+            curl_frame.grid(row=13, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
             curl_exe_label.config(text="Commande Curl :")
+            placeholder_command_label.config(text="Placeholder Command (curl_basic.txt) :")
         elif method == "native":
             # Mode native : afficher le template Python
             user_prompt_label.config(text="Paramètres template :")
-            curl_exe_label.grid(row=14, column=0, sticky="nw", pady=5, padx=(10,5))
-            curl_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
+            curl_exe_label.grid(row=13, column=0, sticky="nw", pady=5, padx=(10,5))
+            curl_frame.grid(row=13, column=1, columnspan=2, sticky="ew", pady=5, padx=(0,10))
             curl_exe_label.config(text="Template Python Native :")
+            placeholder_command_label.config(text="Placeholder Command (native_basic.py) :")
         
         # Recharger le template selon la nouvelle méthode (explicite)
         current_provider = selected_model.get()
@@ -1705,35 +1786,64 @@ print("Template native à implémenter pour {provider}")
     llm_model_combobox = ttk.Combobox(scrollable_frame, textvariable=selected_llm_model, state="readonly")
     llm_model_combobox.grid(row=3, column=1, columnspan=2, sticky="ew", pady=3, padx=(0,10))
 
+    # Fonction pour charger les modèles depuis un fichier JSON
+    def load_models_from_json(provider, template_type="chat"):
+        """
+        Charge les modèles depuis le fichier modeles.json du provider
+        
+        Args:
+            provider: nom du provider (gemini, claude, etc.)
+            template_type: type de template (chat par défaut)
+        
+        Returns:
+            tuple: (liste des modèles, modèle par défaut)
+        """
+        import json
+        
+        models_file = f"templates/{template_type}/{provider}/modeles.json"
+        
+        try:
+            with open(models_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                models = data.get('models', [])
+                default_model = data.get('default', models[0] if models else "")
+                print(f"[DEBUG] Modèles chargés depuis {models_file}: {len(models)} modèles")
+                return models, default_model
+        except FileNotFoundError:
+            print(f"[DEBUG] Fichier modèles introuvable: {models_file}, utilisation fallback")
+            return get_fallback_models(provider), ""
+        except Exception as e:
+            print(f"[DEBUG] Erreur lecture fichier modèles {models_file}: {e}")
+            return get_fallback_models(provider), ""
+
+    def get_fallback_models(provider):
+        """Modèles de fallback si le fichier JSON n'existe pas"""
+        fallback_models = {
+            "openai": ["gpt-5-mini-2025-08-07", "gpt-5-2025-08-07", "gpt-5-nano-2", "gpt-4.1-2025-04-14", "gpt-4o", "gpt-4o-mini", "gpt-4o-turbo", "gpt-oss-120b", "gpt-oss-20b", "o4-mini-deep-research-2025-06-26"],
+            "gemini": ["gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"],
+            "claude": ["claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+            "anthropic": ["claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219", "claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+            "grok": ["grok-3-mini", "grok-3", "grok-4", "grok-4-0709"],
+            "qwen": ["qwen-flash", "qwen-turbo", "qwen-omni-turbo", "qwen-max", "qwen/qwen3-coder:free"],
+            "mistral": ["mistral-medium-2508", "magistral-medium-2507", "ministral-8b-2410", "ministral-3b-2410", "mistral-small-2407", "codestral-2508", "devstral-medium-2507"],
+            "kimi": ["moonshotai/kimi-k2", "moonshotai/kimi-dev-72b:free", "moonshotai/kimi-vl-a3b-thinking", "moonshotai/moonlight-16b-a3b-instruct"],
+            "deepseek": ["deepseek/deepseek-r1-0528-qwen3-8b:free", "deepseek-chat", "deepseek-reasoning"],
+            "lmstudio": ["lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF", "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", "TheBloke/CodeLlama-34B-Instruct-GGUF", "google/gemma-3-1b", "lmstudio-community/gemma-3-12b-it-GGUF", "lmstudio-community/MiniCPM-V-2_6-GGUF"]
+        }
+        return fallback_models.get(provider, ["model-default"])
+
     # Fonction pour mettre à jour les modèles disponibles selon le provider
     def mettre_a_jour_modeles(*args):
         provider = selected_model.get().lower()
-        models = []
+        template_type = selected_template_type.get()
         
-        if provider == "openai":
-            models = ["gpt-5-mini-2025-08-07", "gpt-5-2025-08-07", "gpt-5-nano-2", "gpt-4.1-2025-04-14", "gpt-4o", "gpt-4o-mini", "gpt-4o-turbo", "gpt-oss-120b", "gpt-oss-20b", "o4-mini-deep-research-2025-06-26"]
-        elif provider == "gemini":
-            models = ["gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]
-        elif provider == "claude":
-            models = ["claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219", "claude-sonnet-4-20250514", "claude-opus-4-20250514"]
-        elif provider == "anthropic":
-            models = ["claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219", "claude-sonnet-4-20250514", "claude-opus-4-20250514"]
-        elif provider == "grok":
-            models = ["grok-3-mini", "grok-3", "grok-4", "grok-4-0709"]
-        elif provider == "qwen":
-            models = ["qwen-flash", "qwen-turbo", "qwen-omni-turbo", "qwen-max", "qwen/qwen3-coder:free"]
-        elif provider == "mistral":
-            models = ["mistral-medium-2508", "magistral-medium-2507", "ministral-8b-2410", "ministral-3b-2410", "mistral-small-2407", "codestral-2508", "devstral-medium-2507"]
-        elif provider == "kimi":
-            models = ["moonshotai/kimi-k2", "moonshotai/kimi-dev-72b:free", "moonshotai/kimi-vl-a3b-thinking", "moonshotai/moonlight-16b-a3b-instruct"]
-        elif provider == "deepseek":
-            models = ["deepseek/deepseek-r1-0528-qwen3-8b:free", "deepseek-chat", "deepseek-reasoning"]
-        elif provider == "lmstudio":
-            models = ["lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF", "TheBloke/Mistral-7B-Instruct-v0.2-GGUF", "TheBloke/CodeLlama-34B-Instruct-GGUF", "google/gemma-3-1b", "lmstudio-community/gemma-3-12b-it-GGUF", "lmstudio-community/MiniCPM-V-2_6-GGUF"]
+        # Charger les modèles depuis le fichier JSON
+        models, default_model = load_models_from_json(provider, template_type)
         
         llm_model_combobox['values'] = models
         if models:
-            selected_llm_model.set(models[0])  # Sélectionner le premier par défaut
+            # Utiliser le modèle par défaut du JSON ou le premier si pas spécifié
+            selected_llm_model.set(default_model if default_model else models[0])
         
         # IMPORTANT: Charger le template selon le provider et sa méthode
         # Ceci assure que le changement de provider charge le bon template
@@ -2315,6 +2425,42 @@ print("Template native à implémenter pour {provider}")
     curl_exe_var.set = set_curl_text
     curl_exe_var.get = get_curl_text
 
+    # Placeholder Command - Nouveau champ sous la commande curl
+    placeholder_command_label = ttk.Label(scrollable_frame, text="Placeholder Command :")
+    placeholder_command_label.grid(row=14, column=0, sticky="nw", pady=(1,3), padx=(10,5))
+    
+    # Frame pour le textarea avec scrollbar
+    placeholder_command_frame = ttk.Frame(scrollable_frame)
+    placeholder_command_frame.grid(row=14, column=1, columnspan=2, sticky="ew", pady=(1,3), padx=(0,10))
+    placeholder_command_frame.grid_columnconfigure(0, weight=1)
+    
+    # Textarea avec scrollbar verticale
+    placeholder_command_text = tk.Text(placeholder_command_frame, height=5, width=50, wrap=tk.WORD)
+    placeholder_command_scrollbar = ttk.Scrollbar(placeholder_command_frame, orient="vertical", command=placeholder_command_text.yview)
+    placeholder_command_text.configure(yscrollcommand=placeholder_command_scrollbar.set)
+    
+    placeholder_command_text.grid(row=0, column=0, sticky="ew")
+    placeholder_command_scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    # Variable pour compatibilité avec le code existant
+    placeholder_command_var = tk.StringVar(value="")
+    
+    # Fonctions helper pour synchroniser StringVar avec Text widget
+    def set_placeholder_command_text(value):
+        """Met à jour le contenu du Text widget"""
+        placeholder_command_text.delete(1.0, tk.END)
+        placeholder_command_text.insert(1.0, value)
+    
+    def get_placeholder_command_text():
+        """Récupère le contenu du Text widget"""
+        return placeholder_command_text.get(1.0, tk.END).rstrip('\n')
+    
+    # Redéfinir les méthodes de la StringVar pour utiliser le Text widget
+    original_placeholder_set = placeholder_command_var.set
+    original_placeholder_get = placeholder_command_var.get
+    placeholder_command_var.set = set_placeholder_command_text
+    placeholder_command_var.get = get_placeholder_command_text
+
     # Charger le profil par défaut au démarrage
     profil_defaut = charger_profil_defaut()
     if profil_defaut:
@@ -2486,7 +2632,7 @@ print("Template native à implémenter pour {provider}")
     
     # Espacement supplémentaire en bas pour assurer la visibilité des boutons
     spacer_bottom = ttk.Label(scrollable_frame, text="")
-    spacer_bottom.grid(row=14, column=0, columnspan=3, pady=20)  # Ligne 14 au lieu de 13
+    spacer_bottom.grid(row=15, column=0, columnspan=3, pady=20)  # Ligne 15 au lieu de 14
 
     # Charger les données du profil par défaut au démarrage (sans event)
     try:

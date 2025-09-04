@@ -1,0 +1,9 @@
+{
+  "models": [
+    "deepseek/deepseek-r1-0528-qwen3-8b:free",
+    "deepseek-chat",
+    "deepseek-reasoning"
+  ],
+  "default": "deepseek-chat",
+  "description": "Modèles Deepseek disponibles pour le chat"
+}

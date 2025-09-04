@@ -1,0 +1,9 @@
+{
+  "models": [
+    "local-model-1",
+    "local-model-2",
+    "custom-model"
+  ],
+  "default": "local-model-1",
+  "description": "Modèles LMStudio locaux disponibles pour le chat"
+}

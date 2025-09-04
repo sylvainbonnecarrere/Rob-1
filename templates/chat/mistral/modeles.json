@@ -1,0 +1,13 @@
+{
+  "models": [
+    "mistral-medium-2508",
+    "magistral-medium-2507",
+    "ministral-8b-2410",
+    "ministral-3b-2410", 
+    "mistral-small-2407",
+    "codestral-2508",
+    "devstral-medium-2507"
+  ],
+  "default": "mistral-medium-2508",
+  "description": "Modèles Mistral disponibles pour le chat"
+}

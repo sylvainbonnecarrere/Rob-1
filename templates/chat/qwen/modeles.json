@@ -1,0 +1,11 @@
+{
+  "models": [
+    "qwen-flash",
+    "qwen-turbo",
+    "qwen-omni-turbo", 
+    "qwen-max",
+    "qwen/qwen3-coder:free"
+  ],
+  "default": "qwen-turbo",
+  "description": "Modèles Qwen disponibles pour le chat"
+}
