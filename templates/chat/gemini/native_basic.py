@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 # Template Python natif pour GEMINI
 # Provider: gemini
 
 import os
+import sys
 from google import genai
 from google.genai import types
+
+# Force UTF-8 pour Windows
+sys.stdout.reconfigure(encoding='utf-8')
 
 # Configuration
 api_key = os.environ.get('GEMINI_API_KEY')
@@ -34,9 +39,35 @@ try:
         contents=user_prompt
     )
     
-    # Afficher la réponse
-    print(response.text)
+    # Formater la réponse en JSON compatible avec l'interface
+    import json
+    
+    # Créer une structure JSON similaire à l'API REST de Gemini
+    response_data = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": response.text
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    
+    # Afficher la réponse en JSON pour l'interface
+    print(json.dumps(response_data, ensure_ascii=False))
     
 except Exception as e:
-    print(f"Erreur API: {e}")
+    # Formater l'erreur en JSON également
+    import json
+    error_data = {
+        "error": {
+            "message": str(e),
+            "code": "NATIVE_API_ERROR"
+        }
+    }
+    print(json.dumps(error_data, ensure_ascii=False))
     exit(1)

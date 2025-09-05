@@ -240,15 +240,20 @@ class NativeManager:
         if not api_key_var:
             raise ValueError(f"Variable API non trouvée pour provider '{provider_name}'")
         
-        # 2. Vérification de la clé API - PRIORITÉ aux variables injectées
+        # 2. Gestion intelligente de la clé API (SOLID - sans modifier le template)
         api_key = None
         
-        # 2a. D'abord chercher dans les variables injectées (Solution 2 - Injection automatique)
+        # 2a. D'abord chercher dans les variables injectées (profil V2)
         if 'API_KEY' in variables and variables['API_KEY']:
             api_key = variables['API_KEY']
             logger.debug(f"[NativeManager] Clé API injectée depuis profil V2: {api_key[:10]}...")
+            
+            # SOLUTION SOLID: Injecter dans l'environnement pour que le template fonctionne normalement
+            os.environ[api_key_var] = api_key
+            logger.debug(f"[NativeManager] Clé API injectée dans {api_key_var} pour le template")
+            
         else:
-            # 2b. Fallback vers variable d'environnement
+            # 2b. Fallback vers variable d'environnement existante
             api_key = os.environ.get(api_key_var)
             if api_key:
                 logger.debug(f"[NativeManager] Clé API depuis environnement: {api_key_var}")
@@ -397,15 +402,41 @@ if not api_key:
                 temp_file.write(code)
                 temp_file_path = temp_file.name
             
-            # Exécution dans un subprocess isolé
+            # Exécution dans un subprocess isolé avec gestion UTF-8 Windows
             result = subprocess.run(
                 [sys.executable, temp_file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
+                text=False,  # Pas de décodage automatique pour gérer UTF-8 manuellement
                 timeout=timeout,
                 env=os.environ.copy()  # Passe les variables d'environnement
             )
+            
+            # Décodage UTF-8 manuel (même approche que curl dans gui.py)
+            stdout_decoded = ""
+            stderr_decoded = ""
+            
+            if result.stdout:
+                try:
+                    stdout_decoded = result.stdout.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Fallback avec encoding par défaut
+                    stdout_decoded = result.stdout.decode('cp1252', errors='ignore')
+            
+            if result.stderr:
+                try:
+                    stderr_decoded = result.stderr.decode('utf-8')
+                except UnicodeDecodeError:
+                    stderr_decoded = result.stderr.decode('cp1252', errors='ignore')
+            
+            # Créer un objet résultat avec les chaînes décodées (compatible avec l'ancien format)
+            class DecodedResult:
+                def __init__(self, returncode, stdout, stderr):
+                    self.returncode = returncode
+                    self.stdout = stdout
+                    self.stderr = stderr
+                    
+            result = DecodedResult(result.returncode, stdout_decoded, stderr_decoded)
             
             # Nettoyage
             os.unlink(temp_file_path)

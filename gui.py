@@ -725,23 +725,31 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
             # Initialiser le NativeManager
             native_manager = NativeManager()
             
-            # Préparer les variables pour le template
+            # Préparer les variables pour le template - Mapping V2
+            chat_config = profil.get('chat', {})
+            values_config = chat_config.get('values', {})
+            
             variables = {
                 'USER_PROMPT': question_finale,
-                'LLM_MODEL': profil.get('model', ''),
-                'SYSTEM_PROMPT_ROLE': profil.get('system_prompt', {}).get('role', ''),
-                'SYSTEM_PROMPT_BEHAVIOR': profil.get('system_prompt', {}).get('behavior', '')
+                'LLM_MODEL': values_config.get('llm_model', ''),
+                'API_KEY': values_config.get('api_key', ''),
+                'SYSTEM_PROMPT_ROLE': values_config.get('role', ''),
+                'SYSTEM_PROMPT_BEHAVIOR': values_config.get('behavior', '')
             }
             
-            # Récupérer le template Python depuis le profil
-            template_path = profil.get('native_template_path', '')
-            if not template_path or not os.path.exists(template_path):
+            print(f"[DEBUG] Variables V2 natives: {variables}")
+            
+            # Construire le chemin du template native selon la structure V2
+            provider_name = profil.get('name', '').lower()
+            template_path = f"templates/chat/{provider_name}/native_basic.py"  # Utiliser native_basic.py avec placeholders
+            
+            if not os.path.exists(template_path):
                 raise FileNotFoundError(f"Template Python non trouvé: {template_path}")
+            
+            print(f"[DEBUG] Template native: {template_path}")
             
             with open(template_path, 'r', encoding='utf-8') as f:
                 template_string = f.read()
-            
-            provider_name = profil.get('name', '').lower()
             
             # Exécuter en mode native
             resultat_native = native_manager.execute_native_request(
@@ -1511,8 +1519,17 @@ def open_setup_menu():
             print(f"[DEBUG] Chargement template: {llm_name}/{template_type}/{method}")
             print(f"[DEBUG] Path recherché: templates/{template_type}/{llm_name}/{method}.txt ou {method}.py")
             
-            # Charger le template selon la méthode du profil
-            template_content = load_smart_template(llm_name, template_type, method, for_display=True)
+            # SOLID V2: Charger le template via APIManager
+            if method == 'native':
+                template_id_full = f"{llm_name}_{template_type}_native"
+            else:
+                template_id_full = f"{llm_name}_{template_type}"
+            
+            template_content = api_manager.get_template_content(template_id_full)
+            if template_content:
+                curl_exe_var.set(template_content)
+            else:
+                curl_exe_var.set(f"# Template {template_id_full} non trouvé")
             
         else:
             # FALLBACK: Support ancien format pour compatibilité
@@ -1522,9 +1539,18 @@ def open_setup_menu():
                 provider = template_id.split('_')[0] if '_' in template_id else profil_selectionne.lower()
                 template_type = template_id.split('_')[1] if '_' in template_id and len(template_id.split('_')) > 1 else 'chat'
                 
-                # Utiliser notre système intelligent au lieu de l'APIManager direct
+                # SOLID V2: Utiliser APIManager directement
                 method = donnees_profil.get("method", "curl")
-                template_content = load_smart_template(provider, template_type, method, for_display=True)
+                if method == 'native':
+                    template_id_full = f"{provider}_{template_type}_native"
+                else:
+                    template_id_full = f"{provider}_{template_type}"
+                
+                template_content = api_manager.get_template_content(template_id_full)
+                if template_content:
+                    curl_exe_var.set(template_content)
+                else:
+                    curl_exe_var.set(f"# Template {template_id_full} non trouvé")
             else:
                 # Fallback vers curl_exe pour compatibilité
                 curl_exe_var.set(donnees_profil.get("curl_exe", ""))
@@ -1723,26 +1749,62 @@ print("Template native à implémenter pour {provider}")
     def load_template_by_method(provider, template_type="chat", method=None):
         """
         Charge le template approprié pour l'AFFICHAGE INTERFACE selon la méthode sélectionnée
-        WRAPPER simplifié autour de load_smart_template()
+        SOLID V2: Utilise APIManager refactorisé pour curl et native
         
         Args:
             provider: nom du provider (gemini, claude, etc.)
             template_type: type de template (chat par défaut)
             method: méthode explicite (curl/native). Si None, détecte automatiquement
         """
-        content = load_smart_template(provider, template_type, method, for_display=True)
-        curl_exe_var.set(content)
+        # Détection automatique de la méthode si non fournie
+        if method is None:
+            current_provider = selected_model.get().lower()
+            if current_provider == provider:
+                try:
+                    profile_data = charger_donnees_profil(provider.title())
+                    if profile_data:
+                        # Utiliser la structure JSON V2 pour détecter la méthode
+                        chat_data = profile_data.get('chat', {})
+                        if chat_data:
+                            method = chat_data.get('method', 'curl')
+                        else:
+                            # Fallback vers l'ancien format
+                            method = profile_data.get('method', 'curl')
+                    else:
+                        method = selected_method.get()
+                except Exception as e:
+                    method = selected_method.get()
+            else:
+                method = 'curl'
+        
+        print(f"[DEBUG] load_template_by_method: {provider} {template_type} {method}")
+        
+        # SOLID: Utiliser APIManager pour tous les templates
+        if method == 'native':
+            template_id = f"{provider}_{template_type}_native"
+        else:
+            template_id = f"{provider}_{template_type}"
+        
+        # Charger le template principal via APIManager
+        content = api_manager.get_template_content(template_id)
+        if content:
+            curl_exe_var.set(content)
+        else:
+            curl_exe_var.set(f"# Template {template_id} non trouvé")
         
         # Charger aussi le contenu basic pour le champ "Placeholder Command"
-        basic_content = load_basic_template(provider, template_type, method)
-        placeholder_command_var.set(basic_content)
+        basic_content = api_manager.get_template_basic_content(template_id)
+        if basic_content:
+            placeholder_command_var.set(basic_content)
+        else:
+            placeholder_command_var.set(f"# Template basic {template_id} non trouvé")
         
         return content
 
     def get_execution_template(provider, method, template_type="chat"):
         """
         Obtient le template pour l'EXÉCUTION (avec placeholders _basic)
-        WRAPPER simplifié autour de load_smart_template()
+        SOLID V2: Utilise APIManager refactorisé
         
         Args:
             provider: nom du provider (gemini, claude, etc.)
@@ -1750,9 +1812,23 @@ print("Template native à implémenter pour {provider}")
             template_type: type de template (chat par défaut)
         
         Returns:
-            Contenu du template d'exécution avec placeholders
+            str: contenu du template basic pour exécution
         """
-        return load_smart_template(provider, template_type, method, for_display=False)
+        # SOLID: Construire l'ID selon la méthode
+        if method == 'native':
+            template_id = f"{provider}_{template_type}_native"
+        else:
+            template_id = f"{provider}_{template_type}"
+        
+        # Charger le template basic via APIManager
+        content = api_manager.get_template_basic_content(template_id)
+        
+        if content:
+            print(f"[DEBUG] get_execution_template: template basic chargé pour {template_id}")
+            return content
+        else:
+            print(f"[DEBUG] get_execution_template: template basic non trouvé pour {template_id}")
+            return f"# Template basic {template_id} non trouvé"
 
     # Fonction pour définir un seul profil comme défaut
     def definir_profil_defaut(profil_selectionne):

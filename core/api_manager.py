@@ -409,9 +409,10 @@ class APIManager(IProfileManager):
         """
         Méthode principale pour charger le contenu d'un template
         ARCHITECTURE V3.1.2: Responsabilité centralisée dans APIManager
+        SOLID: Adaptation automatique curl/native selon template_id
         
         Args:
-            template_id: ID du template à charger (ex: 'openai_chat', 'gemini_chat')
+            template_id: ID du template à charger (ex: 'openai_chat', 'gemini_chat_native')
             
         Returns:
             Contenu du template ou None si non trouvé
@@ -419,8 +420,13 @@ class APIManager(IProfileManager):
         try:
             print(f"[APIManager] Chargement template: {template_id}")
             
-            # Utiliser la logique existante de load_template
-            content = self.load_template(template_id)
+            # SOLID: Détection automatique curl vs native
+            if template_id.endswith('_native'):
+                # Mode native : charger depuis fichiers native.py
+                content = self._load_native_template(template_id)
+            else:
+                # Mode curl : utiliser ConfigManager classique
+                content = self.load_template(template_id)
             
             if content:
                 print(f"[APIManager] Template {template_id} chargé avec succès ({len(content)} caractères)")
@@ -431,6 +437,137 @@ class APIManager(IProfileManager):
                 
         except Exception as e:
             print(f"[ERREUR APIManager] Erreur chargement template {template_id}: {e}")
+            return None
+
+    def _load_native_template(self, template_id: str) -> Optional[str]:
+        """
+        Charge un template native depuis les fichiers native.py
+        SOLID: Méthode privée dédiée aux templates native
+        
+        Args:
+            template_id: ID du template native (ex: 'gemini_chat_native')
+            
+        Returns:
+            Contenu du fichier native.py ou None si non trouvé
+        """
+        try:
+            # Parser l'ID pour extraire provider et template_type
+            # Format attendu: provider_templatetype_native
+            parts = template_id.split('_')
+            if len(parts) < 3 or parts[-1] != 'native':
+                print(f"[APIManager] Format template_id native invalide: {template_id}")
+                return None
+            
+            provider = parts[0]
+            template_type = '_'.join(parts[1:-1])  # Gérer les template_type composés
+            
+            # Construire le chemin vers native.py
+            template_path = f"templates/{template_type}/{provider}/native.py"
+            
+            if os.path.exists(template_path):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    print(f"[APIManager] Template native chargé: {template_path}")
+                    return content
+            else:
+                print(f"[APIManager] Fichier native non trouvé: {template_path}")
+                return None
+                
+        except Exception as e:
+            print(f"[ERREUR APIManager] Erreur chargement template native {template_id}: {e}")
+            return None
+
+    def get_template_basic_content(self, template_id: str) -> Optional[str]:
+        """
+        Charge le contenu d'un template _basic (pour placeholders)
+        SOLID: Gestion unifiée curl_basic.txt et native_basic.py
+        
+        Args:
+            template_id: ID du template (ex: 'gemini_chat', 'gemini_chat_native')
+            
+        Returns:
+            Contenu du fichier _basic correspondant ou None si non trouvé
+        """
+        try:
+            print(f"[APIManager] Chargement template basic: {template_id}")
+            
+            # SOLID: Détection automatique curl vs native
+            if template_id.endswith('_native'):
+                # Mode native : charger native_basic.py
+                content = self._load_native_basic_template(template_id)
+            else:
+                # Mode curl : charger curl_basic.txt
+                content = self._load_curl_basic_template(template_id)
+            
+            if content:
+                print(f"[APIManager] Template basic {template_id} chargé avec succès ({len(content)} caractères)")
+                return content
+            else:
+                print(f"[APIManager] Template basic {template_id} non trouvé")
+                return None
+                
+        except Exception as e:
+            print(f"[ERREUR APIManager] Erreur chargement template basic {template_id}: {e}")
+            return None
+
+    def _load_native_basic_template(self, template_id: str) -> Optional[str]:
+        """
+        Charge un template native_basic.py
+        SOLID: Méthode privée dédiée aux templates native_basic
+        """
+        try:
+            # Parser l'ID pour extraire provider et template_type
+            parts = template_id.split('_')
+            if len(parts) < 3 or parts[-1] != 'native':
+                return None
+            
+            provider = parts[0]
+            template_type = '_'.join(parts[1:-1])
+            
+            # Construire le chemin vers native_basic.py
+            template_path = f"templates/{template_type}/{provider}/native_basic.py"
+            
+            if os.path.exists(template_path):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    print(f"[APIManager] Template native_basic chargé: {template_path}")
+                    return content
+            else:
+                print(f"[APIManager] Fichier native_basic non trouvé: {template_path}")
+                return None
+                
+        except Exception as e:
+            print(f"[ERREUR APIManager] Erreur chargement native_basic {template_id}: {e}")
+            return None
+
+    def _load_curl_basic_template(self, template_id: str) -> Optional[str]:
+        """
+        Charge un template curl_basic.txt
+        SOLID: Méthode privée dédiée aux templates curl_basic
+        """
+        try:
+            # Parser l'ID pour extraire provider et template_type  
+            parts = template_id.split('_')
+            if len(parts) < 2:
+                return None
+                
+            provider = parts[0]
+            template_type = '_'.join(parts[1:])
+            
+            # Construire le chemin vers curl_basic.txt
+            template_path = f"templates/{template_type}/{provider}/curl_basic.txt"
+            
+            if os.path.exists(template_path):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    print(f"[APIManager] Template curl_basic chargé: {template_path}")
+                    return content
+            else:
+                print(f"[APIManager] Fichier curl_basic non trouvé: {template_path}")
+                return None
+                
+        except Exception as e:
+            print(f"[ERREUR APIManager] Erreur chargement curl_basic {template_id}: {e}")
             return None
 
     def get_processed_template(self, template_id: str, profile_data: Dict[str, Any], user_prompt: str = "") -> Optional[str]:

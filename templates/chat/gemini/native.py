@@ -34,9 +34,35 @@ try:
         contents=user_prompt
     )
     
-    # Afficher la réponse
-    print(response.text)
+    # Formater la réponse en JSON compatible avec l'interface
+    import json
+    
+    # Créer une structure JSON similaire à l'API REST de Gemini
+    response_data = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": response.text
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    
+    # Afficher la réponse en JSON pour l'interface
+    print(json.dumps(response_data, ensure_ascii=False))
     
 except Exception as e:
-    print(f"Erreur API: {e}")
+    # Formater l'erreur en JSON également
+    import json
+    error_data = {
+        "error": {
+            "message": str(e),
+            "code": "NATIVE_API_ERROR"
+        }
+    }
+    print(json.dumps(error_data, ensure_ascii=False))
     exit(1)
