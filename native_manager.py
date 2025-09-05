@@ -240,10 +240,21 @@ class NativeManager:
         if not api_key_var:
             raise ValueError(f"Variable API non trouvée pour provider '{provider_name}'")
         
-        # 2. Vérification de la clé API
-        api_key = os.environ.get(api_key_var)
+        # 2. Vérification de la clé API - PRIORITÉ aux variables injectées
+        api_key = None
+        
+        # 2a. D'abord chercher dans les variables injectées (Solution 2 - Injection automatique)
+        if 'API_KEY' in variables and variables['API_KEY']:
+            api_key = variables['API_KEY']
+            logger.debug(f"[NativeManager] Clé API injectée depuis profil V2: {api_key[:10]}...")
+        else:
+            # 2b. Fallback vers variable d'environnement
+            api_key = os.environ.get(api_key_var)
+            if api_key:
+                logger.debug(f"[NativeManager] Clé API depuis environnement: {api_key_var}")
+        
         if not api_key:
-            raise ValueError(f"Variable d'environnement {api_key_var} non définie")
+            raise ValueError(f"Clé API non trouvée - ni dans profil ni dans variable d'environnement {api_key_var}")
         
         # 3. Ajout de l'en-tête UTF-8 si absent
         prepared_code = template_string

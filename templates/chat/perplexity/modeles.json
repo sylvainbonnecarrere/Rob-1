@@ -1,0 +1,11 @@
+{
+  "models": [
+    "sonar",
+    "sonar-reasoning-pro",
+    "sonar-omni-turbo", 
+    "sonar-max",
+    "sonar/sonar3-coder:free"
+  ],
+  "default": "sonar",
+  "description": "Modèles Sonar Perplexity disponibles pour le chat"
+}

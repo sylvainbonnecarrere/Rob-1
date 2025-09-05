@@ -1,0 +1,46 @@
+{
+  "name": "Perplexity",
+  "chat": {
+    "method": "curl",
+    "values": {
+      "llm_model": "sonar",
+      "api_key": "XXXX",                    
+      "role": "Instructeur forensic",        
+      "behavior": "synthétique, 4 phrases max.", 
+      "history": true,
+      "default": false
+    },
+    "placeholders": {
+      "placeholder_model": "sonar",      
+      "placeholder_api_key": "<token>",     
+      "placeholder_role": "Be precise",         
+      "placeholder_behavior": "and concise", 
+      "placeholder_user_prompt": "How many stars are there in our galaxy?"     
+    },
+    "response_path": ["choices", "message", "content"]
+  },
+  "conversation_management": {
+    "words_enabled": true,
+    "sentences_enabled": true,
+    "tokens_enabled": false,
+    "word_threshold": 300,
+    "sentence_threshold": 15,
+    "token_threshold": 1000,
+    "summary_template": "perplexity_chat",
+    "custom_instructions": "Résume la conversation précédente en conservant les points clés étape par étape.",
+    "auto_save": true
+  },
+  "file_generation": {
+    "enabled": false,
+    "mode": "simple",
+    "simple_config": {
+      "include_question": true,
+      "include_response": true,
+      "base_filename": "conversation",
+      "same_file": true
+    },
+    "dev_config": {
+      "extension": ".py"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+curl --request POST \
+  --url https://api.perplexity.ai/chat/completions \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "model": "sonar",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Be precise, and concise."
+    },
+    {
+      "role": "user",
+      "content": "How many stars are there in our galaxy?"
+    }
+  ]
+}'

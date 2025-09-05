@@ -315,16 +315,17 @@ def preparer_requete_curl(final_prompt):
     """
     print(f"[DEBUG] === PHASE 1 - CURL SÉCURISÉ VIA FICHIER JSON ===")
     
-    # Récupérer le profil API actuel
+    # Récupérer le profil API actuel avec mapping V2
     provider = profilAPIActuel.get('name', '').lower()
-    template_id = profilAPIActuel.get('template_id', '')
-    template_type = profilAPIActuel.get('template_type', 'chat')
+    chat_config = profilAPIActuel.get('chat', {})
+    method = chat_config.get('method', 'curl')
+    template_type = 'chat'  # Fixe en V2
     
     # Construire l'ID du template selon la structure V2
-    if not template_id:
-        template_id = f"{provider}_{template_type}"
+    template_id = f"{provider}_{template_type}"
     
     print(f"[DEBUG] Provider: {provider}")
+    print(f"[DEBUG] Method: {method}")
     print(f"[DEBUG] Template ID: {template_id}")
     print(f"[DEBUG] Final prompt: {final_prompt[:100]}...")
     
@@ -592,9 +593,13 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
         champ_r.config(state="disabled")
         return
 
-    # Récupérer la méthode depuis le profil chargé
+    # Récupérer la méthode depuis le profil chargé - Mapping V2
     profil = charger_profil_api()
-    method = profil.get('method', 'curl') if profil else 'curl'
+    if profil:
+        chat_config = profil.get('chat', {})
+        method = chat_config.get('method', 'curl')
+    else:
+        method = 'curl'
     
     # Indicateur de méthode utilisée (discret)
     method_indicator = "🌐" if method == 'curl' else "⚡" if method == 'native' else "📡"
@@ -814,8 +819,9 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 try:
                     from response_parser import parse_response
                     
-                    # Lire le response_path depuis le profil
-                    response_path = profil.get('response_path', [])
+                    # Lire le response_path depuis le profil - Mapping V2
+                    chat_config = profil.get('chat', {})
+                    response_path = chat_config.get('response_path', profil.get('response_path', []))
                     provider = profil.get('name', 'unknown')
                     
                     print(f"[DEBUG] Parsing Phase 2 avec provider: {provider}")
@@ -945,7 +951,9 @@ def ouvrir_fenetre_apitest():
     status_label = None
     
     # Vérifier si l'historique est activé et initialiser ConversationManager
-    if profilAPIActuel.get('history', False):
+    # Mapping V2: chat.values.history
+    historique_active = profilAPIActuel.get('chat', {}).get('values', {}).get('history', False)
+    if historique_active:
         try:
             # Lire la configuration directement depuis le profil principal
             nom_profil = nom_profil_charge.split('.')[0]
@@ -1006,8 +1014,9 @@ def ouvrir_fenetre_apitest():
             return ""
         
         # Récupérer méthode et informations V2
-        method = profil.get('method', 'curl')
-        template_type = profil.get('template_type', 'chat')
+        chat_config = profil.get('chat', {})
+        method = chat_config.get('method', 'curl')
+        template_type = 'chat'  # Fixe pour V2
         provider = profil.get('name', '').lower()
         
         # PHASE 3.1.2: Utiliser APIManager centralisé pour tous les templates
@@ -1063,9 +1072,11 @@ def ouvrir_fenetre_apitest():
     # === INDICATEUR MÉTHODE ET CONFIGURATION V2 ===
     def get_method_info():
         """Récupère et formate les informations de méthode depuis le profil chargé"""
-        method = profilAPIActuel.get('method', 'curl')
-        template_type = profilAPIActuel.get('template_type', 'chat')
-        llm_model = profilAPIActuel.get('llm_model', '')
+        chat_config = profilAPIActuel.get('chat', {})
+        values_config = chat_config.get('values', {})
+        method = chat_config.get('method', 'curl')
+        template_type = 'chat'  # Fixe pour V2
+        llm_model = values_config.get('llm_model', '')
         
         # Formater l'affichage selon la méthode
         if method == 'curl':
@@ -1120,7 +1131,8 @@ def ouvrir_fenetre_apitest():
     flash_indicator_label.pack(side="left")
     
     # Mettre à jour l'affichage initial de l'indicateur éclair
-    if profilAPIActuel.get('history', False):
+    values_config = profilAPIActuel.get('chat', {}).get('values', {})
+    if values_config.get('history', False):
         flash_indicator_label.config(text=" | ⚡", foreground="darkblue")
     
     # Fonctions pour gérer l'indicateur historique dynamique
@@ -1131,7 +1143,8 @@ def ouvrir_fenetre_apitest():
         method_info_label.config(text=get_method_info())
         
         # Changer seulement la couleur du symbole éclair
-        if profilAPIActuel.get('history', False):
+        values_config = profilAPIActuel.get('chat', {}).get('values', {})
+        if values_config.get('history', False):
             if in_progress:
                 flash_indicator_label.config(foreground="gold")  # Jaune/doré pour synthèse en cours
             else:
@@ -1145,7 +1158,8 @@ def ouvrir_fenetre_apitest():
     synthesis_control = set_synthesis_in_progress
     
     # Ajouter infobulle avec informations détaillées selon la méthode
-    method = profilAPIActuel.get('method', 'curl')
+    chat_config = profilAPIActuel.get('chat', {})
+    method = chat_config.get('method', 'curl')
     if method == 'curl':
         tooltip_text = "Mode Curl: Utilisation des commandes curl pour les requêtes API.\nMode par défaut compatible avec tous les systèmes."
     elif method == 'native':
@@ -1224,8 +1238,9 @@ def ouvrir_fenetre_apitest():
     bouton_copier = ttk.Button(frame_boutons, text="Copier la réponse", command=lambda: copier_au_presse_papier(champ_r))
     bouton_copier.pack(side="left", padx=10)
 
-    # Bouton adaptatif selon la méthode
-    method = profilAPIActuel.get('method', 'curl')
+    # Bouton adaptatif selon la méthode - Mapping V2
+    chat_config = profilAPIActuel.get('chat', {})
+    method = chat_config.get('method', 'curl')
     if method == 'curl':
         bouton_text = "🌐 Envoyer (Curl)"
     elif method == 'native':

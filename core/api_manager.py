@@ -134,8 +134,17 @@ class APIManager(IProfileManager):
             
             for profile_name in available:
                 profile_data = self.load_profile(profile_name)
-                if profile_data and profile_data.get('default', False):
-                    return profile_data
+                if profile_data:
+                    # Vérifier structure V2 en priorité
+                    chat_values = profile_data.get('chat', {}).get('values', {})
+                    is_default = chat_values.get('default', False)
+                    
+                    # Fallback vers ancien format pour compatibilité
+                    if not is_default:
+                        is_default = profile_data.get('default', False)
+                    
+                    if is_default:
+                        return profile_data
             
             # Si aucun profil par défaut, prendre le premier disponible
             if available:
@@ -440,13 +449,25 @@ class APIManager(IProfileManager):
         try:
             print(f"[APIManager] Traitement template avec placeholders: {template_id}")
             
-            # 1. Charger le template brut (curl_basic.txt)
+            # 1. Charger le template brut selon la méthode
             if '_chat' in template_id:
                 provider = template_id.replace('_chat', '')
-                template_path = os.path.join(self._config_manager.templates_dir, "chat", provider, "curl_basic.txt")
+                
+                # Déterminer la méthode depuis profile_data
+                chat_config = profile_data.get('chat', {})
+                method = chat_config.get('method', 'curl')
+                
+                # Choisir le bon template selon la méthode
+                if method == 'native':
+                    template_filename = "native_basic.txt"
+                else:
+                    template_filename = "curl_basic.txt"
+                
+                template_path = os.path.join(self._config_manager.templates_dir, "chat", provider, template_filename)
+                print(f"[APIManager] Méthode détectée: {method}, template: {template_filename}")
                 
                 if not os.path.exists(template_path):
-                    print(f"[APIManager] Template curl_basic.txt non trouvé: {template_path}")
+                    print(f"[APIManager] Template {template_filename} non trouvé: {template_path}")
                     return None
                 
                 with open(template_path, 'r', encoding='utf-8') as f:
@@ -499,13 +520,23 @@ class APIManager(IProfileManager):
                 
                 return escaped
             
+            # Extraction des valeurs selon la structure V2 et fallback ancien format
+            chat_config = profile_data.get('chat', {})
+            values_config = chat_config.get('values', {})
+            
+            # Mapping V2 avec fallback vers ancien format
+            api_key = values_config.get('api_key', profile_data.get('api_key', ''))
+            llm_model = values_config.get('llm_model', profile_data.get('model', profile_data.get('llm_model', '')))
+            role = values_config.get('role', profile_data.get('role', ''))
+            behavior = values_config.get('behavior', profile_data.get('behavior', ''))
+            
             # Placeholders standards avec échappement pour USER_PROMPT
             replacements = {
-                '{{API_KEY}}': profile_data.get('api_key', ''),
-                '{{LLM_MODEL}}': profile_data.get('model', profile_data.get('llm_model', '')),
+                '{{API_KEY}}': api_key,
+                '{{LLM_MODEL}}': llm_model,
                 '{{USER_PROMPT}}': escape_json_value(user_prompt),  # ← ÉCHAPPEMENT JSON
-                '{{SYSTEM_PROMPT_ROLE}}': profile_data.get('role', ''),
-                '{{SYSTEM_PROMPT_BEHAVIOR}}': profile_data.get('behavior', ''),
+                '{{SYSTEM_PROMPT_ROLE}}': role,
+                '{{SYSTEM_PROMPT_BEHAVIOR}}': behavior,
             }
             
             # Effectuer les remplacements
