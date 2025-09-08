@@ -588,7 +588,13 @@ class APIManager(IProfileManager):
             
             # 1. Charger le template brut selon la méthode
             if '_chat' in template_id:
-                provider = template_id.replace('_chat', '')
+                # Correction: Parser correctement les template_id avec suffixe _native
+                if template_id.endswith('_native'):
+                    # Pour "gemini_chat_native" -> provider = "gemini"
+                    provider = template_id.replace('_chat_native', '')
+                else:
+                    # Pour "gemini_chat" -> provider = "gemini"
+                    provider = template_id.replace('_chat', '')
                 
                 # Déterminer la méthode depuis profile_data
                 chat_config = profile_data.get('chat', {})
@@ -596,7 +602,7 @@ class APIManager(IProfileManager):
                 
                 # Choisir le bon template selon la méthode
                 if method == 'native':
-                    template_filename = "native.py"
+                    template_filename = "native_basic.py"  # CORRECTION: Utiliser native_basic.py pour placeholders
                 else:
                     template_filename = "curl_basic.txt"
                 

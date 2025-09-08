@@ -4,40 +4,18 @@
 # Provider: gemini
 
 import os
-import sys
 from google import genai
 from google.genai import types
 
-# Force UTF-8 pour Windows
-sys.stdout.reconfigure(encoding='utf-8')
-
-# Configuration
-api_key = os.environ.get('GEMINI_API_KEY')
-if not api_key:
-    print("ERROR: GEMINI_API_KEY not found in environment")
-    exit(1)
-
-# Initialiser le client
-client = genai.Client(api_key=api_key)
-
-# Variables du template
-model = "{{LLM_MODEL}}"
-user_prompt = "{{USER_PROMPT}}"
-system_role = "{{SYSTEM_PROMPT_ROLE}}"
-system_behavior = "{{SYSTEM_PROMPT_BEHAVIOR}}"
-
-# Configuration de la requête
-config = types.GenerateContentConfig(
-    system_instruction=f"{system_role}. {system_behavior}"
-)
-
 try:
+    client = genai.Client(api_key="{{API_KEY}}")
     # Exécuter la requête
     response = client.models.generate_content(
-        model=model,
-        config=config,
-        contents=user_prompt
-    )
+    model="{{LLM_MODEL}}",
+    config=types.GenerateContentConfig(
+        system_instruction="{{SYSTEM_PROMPT_ROLE}}. {{SYSTEM_PROMPT_BEHAVIOR}}"),
+    contents="{{USER_PROMPT}}"
+)
     
     # Formater la réponse en JSON compatible avec l'interface
     import json

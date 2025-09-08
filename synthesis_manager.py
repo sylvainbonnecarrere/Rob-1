@@ -135,7 +135,7 @@ def _synthesis_native(prompt_text, profil):
         provider = profil.get('name', '').lower()
         template_id = f"{provider}_chat_native"
         
-        template_content = api_manager.get_template_content(template_id)
+        template_content = api_manager.get_template_basic_content(template_id)
         if not template_content:
             return f"❌ Template native {template_id} non trouvé"
         

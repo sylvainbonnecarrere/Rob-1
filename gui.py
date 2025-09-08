@@ -321,8 +321,11 @@ def preparer_requete_curl(final_prompt):
     method = chat_config.get('method', 'curl')
     template_type = 'chat'  # Fixe en V2
     
-    # Construire l'ID du template selon la structure V2
-    template_id = f"{provider}_{template_type}"
+    # Construire l'ID du template selon la structure V2 et la méthode
+    if method == 'native':
+        template_id = f"{provider}_{template_type}_native"
+    else:
+        template_id = f"{provider}_{template_type}"
     
     print(f"[DEBUG] Provider: {provider}")
     print(f"[DEBUG] Method: {method}")
@@ -618,58 +621,8 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 if 'synthesis_control' in globals():
                     synthesis_control(True)
                 
-                # Fonction wrapper pour l'appel API de résumé
-                def api_summary_call(prompt_text):
-                    profil = charger_profil_api()
-                    # PHASE 1: Utiliser le nouveau système PayloadManager pour les résumés aussi
-                    resultat_preparation = preparer_requete_curl(prompt_text)
-                    
-                    # Vérifier si on a un fichier payload ou ancien système
-                    if isinstance(resultat_preparation, tuple) and len(resultat_preparation) == 2:
-                        # Nouveau système Phase 1 avec fichier payload
-                        requete_curl, payload_file = resultat_preparation
-                        print(f"[DEBUG] Phase 1 résumé - Fichier payload: {payload_file}")
-                    else:
-                        # Ancien système fallback
-                        requete_curl = resultat_preparation
-                        payload_file = None
-                        print(f"[DEBUG] Résumé fallback ancien système")
-                    
-                    resultat = executer_commande_curl(requete_curl, payload_file)
-                    
-                    if resultat.returncode == 0:
-                        try:
-                            reponse_json = json.loads(resultat.stdout)
-                            
-                            # PHASE 2: Utiliser le nouveau système response_parser générique pour le résumé
-                            try:
-                                from response_parser import parse_response
-                                
-                                # Lire le response_path depuis le profil V2
-                                chat_config = profil.get('chat', {})
-                                response_path = chat_config.get('response_path', [])
-                                provider = profil.get('name', 'unknown')
-                                
-                                print(f"[DEBUG] Résumé Phase 2 avec provider: {provider}")
-                                print(f"[DEBUG] Résumé response path: {response_path}")
-                                
-                                # Extraction générique avec le nouveau parser
-                                texte_reponse = parse_response(reponse_json, response_path)
-                                
-                                if not texte_reponse:
-                                    return f"❌ Erreur parsing résumé {provider} avec path {response_path}"
-                                    
-                                print(f"✅ Résumé Phase 2 extrait: {len(texte_reponse)} chars")
-                                return texte_reponse
-                                
-                            except ImportError:
-                                # Fallback ancien système hardcodé (Gemini seulement)
-                                print("[DEBUG] Résumé fallback vers ancien parsing Gemini")
-                                return reponse_json["candidates"][0]["content"]["parts"][0]["text"]
-                        except Exception as e:
-                            print(f"[DEBUG] Erreur parsing résumé: {e}")
-                            return "Erreur lors du résumé"
-                    return "Erreur API lors du résumé"
+                # Importer la fonction synthèse depuis synthesis_manager  
+                from synthesis_manager import api_summary_call
                 
                 # Générer le résumé sur l'historique existant
                 success = conversation_manager.summarize_history(api_summary_call)
