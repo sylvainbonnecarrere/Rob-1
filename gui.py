@@ -607,11 +607,8 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
     champ_r.update_idletasks()
 
     try:
-        # 1. Ajouter la question à l'historique du ConversationManager
+        # 1. Vérifier si un résumé est nécessaire AVANT d'ajouter la nouvelle question
         if conversation_manager:
-            conversation_manager.add_message('user', question)
-            
-            # 2. Vérifier si un résumé est nécessaire AVANT l'appel API
             if conversation_manager.should_summarize():
                 print("🔄 Seuil atteint - Génération du résumé...")
                 champ_r.insert(tk.END, "🔄 Génération du résumé contextuel...\n")
@@ -648,8 +645,9 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                             try:
                                 from response_parser import parse_response
                                 
-                                # Lire le response_path depuis le profil
-                                response_path = profil.get('response_path', [])
+                                # Lire le response_path depuis le profil V2
+                                chat_config = profil.get('chat', {})
+                                response_path = chat_config.get('response_path', [])
                                 provider = profil.get('name', 'unknown')
                                 
                                 print(f"[DEBUG] Résumé Phase 2 avec provider: {provider}")
@@ -673,7 +671,7 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                             return "Erreur lors du résumé"
                     return "Erreur API lors du résumé"
                 
-                # Générer le résumé
+                # Générer le résumé sur l'historique existant
                 success = conversation_manager.summarize_history(api_summary_call)
                 
                 # Désactiver l'indicateur de synthèse en cours (retour couleur normale)
@@ -687,6 +685,9 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 else:
                     print("❌ Échec du résumé - continue avec l'historique complet")
                     champ_r.insert(tk.END, "⚠️ Échec du résumé - conversation continue\n")
+            
+            # 2. MAINTENANT ajouter la nouvelle question à l'historique (après résumé)
+            conversation_manager.add_message('user', question)
             
             # 3. Construire le prompt final avec l'historique déjà échappé
             # Le ConversationManager fournit déjà un contenu échappé et sécurisé

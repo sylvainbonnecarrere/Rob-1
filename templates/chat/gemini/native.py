@@ -16,10 +16,10 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # Variables du template
-model = "gemini-2.5-flash:generateContent"
-user_prompt = "Hello there"
-system_role = "You are a cat. "
-system_behavior = "Your name is Neko."
+model = "LLM_MODEL"
+user_prompt = "USER_PROMPT"
+system_role = "SYSTEM_PROMPT_ROLE"
+system_behavior = "SYSTEM_PROMPT_BEHAVIOR"
 
 # Configuration de la requête
 config = types.GenerateContentConfig(

@@ -596,7 +596,7 @@ class APIManager(IProfileManager):
                 
                 # Choisir le bon template selon la méthode
                 if method == 'native':
-                    template_filename = "native_basic.txt"
+                    template_filename = "native.py"
                 else:
                     template_filename = "curl_basic.txt"
                 
