@@ -1,21 +1,11 @@
-curl "https://generativelanguage.googleapis.com/v1beta/models/{{LLM_MODEL}}:generateContent" \
-  -H "x-goog-api-key: {{API_KEY}}" \
-  -H 'Content-Type: application/json' \
+curl https://api.deepseek.com/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {{API_KEY}}" \
   -d '{
-    "system_instruction": {
-      "parts": [
-        {
-          "text": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}"
-        }
-      ]
-    },
-    "contents": [
-      {
-        "parts": [
-          {
-            "text": "{{USER_PROMPT}}"
-          }
-        ]
-      }
-    ]
-  }'
+        "model": "{{LLM_MODEL}}",
+        "messages": [
+          {"role": "system", "content": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}"},
+          {"role": "user", "content": "{{USER_PROMPT}}"}
+        ],
+        "stream": false
+      }'

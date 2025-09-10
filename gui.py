@@ -2861,55 +2861,6 @@ print("Template native à implémenter pour {provider}")
     bouton_annuler = ttk.Button(boutons_frame, text="Annuler", command=setup_window.destroy)
     bouton_annuler.pack(side="left")
 
-    # Charger les données du profil par défaut au démarrage (sans event)
-    try:
-        profil_selectionne = selected_model.get()
-        donnees_profil = charger_donnees_profil(profil_selectionne)
-        
-        # Utiliser la fonction helper pour le nouveau mapping
-        chat_data = charger_donnees_avec_nouveau_mapping(donnees_profil)
-        
-        # Charger le template selon la méthode sélectionnée
-        template_id = donnees_profil.get("template_id", "")
-        print(f"[DEBUG] Template ID trouvé: '{template_id}'")
-        if template_id:
-            # Extraire provider et type du template_id
-            provider = template_id.split('_')[0]
-            template_type = template_id.split('_')[1] if '_' in template_id else 'chat'
-            # Utiliser la fonction centralisée qui respecte la méthode
-            load_template_by_method(provider, template_type)
-            print(f"[DEBUG] Template chargé avec load_template_by_method pour {template_id}")
-        else:
-            fallback_curl = donnees_profil.get("curl_exe", "")
-            curl_exe_var.set(fallback_curl)
-            print(f"[DEBUG] Pas de template_id, utilisation de curl_exe: {len(fallback_curl)} caractères")
-        
-        print(f"[DEBUG] Profil par défaut chargé avec succès: {profil_selectionne}")
-        
-        # INITIALISATION DES PLACEHOLDERS - Priorité aux valeurs sauvegardées
-        if template_id:
-            print(f"[DEBUG] Initialisation des placeholders pour template: {template_id}")
-            # D'abord charger le template (structure des champs)
-            update_form_with_llm_data(template_id)
-            # PUIS appliquer les valeurs sauvegardées par-dessus
-            if chat_data and chat_data.get("placeholders"):
-                print(f"[DEBUG] Application des placeholders sauvegardés par-dessus le template")
-                charger_donnees_avec_nouveau_mapping(donnees_profil)
-        else:
-            # Template par défaut Gemini si aucun trouvé
-            print(f"[DEBUG] Pas de template_id, initialisation Gemini par défaut")
-            update_form_with_llm_data("gemini_chat")
-            # PUIS appliquer les valeurs sauvegardées par-dessus  
-            if chat_data and chat_data.get("placeholders"):
-                print(f"[DEBUG] Application des placeholders sauvegardés Gemini par défaut")
-                charger_donnees_avec_nouveau_mapping(donnees_profil)
-    except Exception as e:
-        print(f"[DEBUG] Erreur lors du chargement initial du profil par défaut Setup API: {e}")
-        # Valeurs par défaut de sécurité
-        user_prompt_var.set("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent")
-        role_var.set("assistant IA")
-        set_default_behavior_text("utile et informatif")  # Utiliser la fonction pour Text widget
-
 def open_setup_file_menu():
     """Ouvre le formulaire de configuration de génération de fichiers."""
     setup_file_window = tk.Toplevel(root)

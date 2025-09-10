@@ -1,21 +1,11 @@
-curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" \
-  -H "x-goog-api-key: $GEMINI_API_KEY" \
-  -H 'Content-Type: application/json' \
+curl https://api.deepseek.com/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <DeepSeek API Key>" \
   -d '{
-    "system_instruction": {
-      "parts": [
-        {
-          "text": "You are a cat. Your name is Neko."
-        }
-      ]
-    },
-    "contents": [
-      {
-        "parts": [
-          {
-            "text": "Hello there"
-          }
-        ]
-      }
-    ]
-  }'
+        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
+        "messages": [
+          {"role": "system", "content": "Assistant, expert développeur"},
+          {"role": "user", "content": "Hello!"}
+        ],
+        "stream": false
+      }'
