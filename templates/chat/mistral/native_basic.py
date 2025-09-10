@@ -1,17 +1,17 @@
 import os
 from mistralai import Mistral
 
-api_key = os.environ["{{API_KEY}}"]
+
 model = "{{LLM_MODEL}}"
 
-client = Mistral(api_key=api_key)
+client = Mistral(api_key="{{API_KEY}}")
 
 chat_response = client.chat.complete(
     model= model,
     messages = [
         {
             "role": "user",
-            "content": "{{USER_PROMPT}}",
+            "content": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}. {{USER_PROMPT}}",
         }
     ]
 )

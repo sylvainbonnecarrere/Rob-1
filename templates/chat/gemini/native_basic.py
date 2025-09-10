@@ -39,13 +39,20 @@ try:
     print(json.dumps(response_data, ensure_ascii=False))
     
 except Exception as e:
-    # Formater l'erreur en JSON également
+    # Formater l'erreur en JSON avec la même structure que les réponses réussies
     import json
     error_data = {
-        "error": {
-            "message": str(e),
-            "code": "NATIVE_API_ERROR"
-        }
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": f"Erreur API Gemini: {str(e)}"
+                        }
+                    ]
+                }
+            }
+        ]
     }
     print(json.dumps(error_data, ensure_ascii=False))
     exit(1)

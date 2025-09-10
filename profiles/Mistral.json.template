@@ -12,9 +12,9 @@
     },
     "placeholders": {
       "placeholder_model": "mistral-large-latest",      
-      "placeholder_api_key": "YOUR_MISTRAL_API_KEY_HERE",     
-      "placeholder_role": "Assistant",         
-      "placeholder_behavior": "expert développeur", 
+      "placeholder_api_key": "MISTRAL_API_KEY",     
+      "placeholder_role": "You are mouse",         
+      "placeholder_behavior": "very smart", 
       "placeholder_user_prompt": "What is the best French cheese?"     
     },
      "response_path": ["choices", 0, "message", "content"]

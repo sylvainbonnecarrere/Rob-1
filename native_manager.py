@@ -202,14 +202,25 @@ class NativeManager:
             # Étape 4: Exécution sécurisée
             result = self._execute_safely(prepared_code)
             
-            logger.info("[NativeManager] ✅ Exécution native réussie")
-            return {
-                "status": "success",
-                "output": result["stdout"],
-                "errors": result["stderr"] if result["stderr"] else None,
-                "execution_time": "native",
-                "variables": variables
-            }
+            # Vérifier le code de retour pour déterminer le statut réel
+            if result["returncode"] == 0:
+                logger.info("[NativeManager] ✅ Exécution native réussie")
+                return {
+                    "status": "success",
+                    "output": result["stdout"],
+                    "errors": result["stderr"] if result["stderr"] else None,
+                    "execution_time": "native",
+                    "variables": variables
+                }
+            else:
+                logger.error(f"[NativeManager] ❌ Exécution native échouée - Code retour: {result['returncode']}")
+                return {
+                    "status": "error",
+                    "output": result["stdout"] if result["stdout"] else None,
+                    "errors": result["stderr"] if result["stderr"] else f"Process exited with code {result['returncode']}",
+                    "execution_time": "native",
+                    "variables": variables
+                }
             
         except Exception as e:
             logger.error(f"[NativeManager] ❌ Erreur exécution: {e}")
@@ -266,7 +277,23 @@ class NativeManager:
         if "# -*- coding: utf-8 -*-" not in prepared_code:
             prepared_code = "# -*- coding: utf-8 -*-\n" + prepared_code
         
-        # 4. Injection de la gestion de clé API si non présente
+        # 4. Injection de la gestion d'encodage UTF-8 pour Windows
+        utf8_injection = """
+import sys
+
+# Gestion automatique de l'encodage UTF-8 pour Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+"""
+        # Insérer après les imports existants
+        import_end = prepared_code.find('\n\n')
+        if import_end > 0:
+            prepared_code = prepared_code[:import_end] + utf8_injection + prepared_code[import_end:]
+        else:
+            prepared_code = utf8_injection + prepared_code
+
+        # 5. Injection de la gestion de clé API si non présente
         if f"os.environ.get('{api_key_var}')" not in prepared_code:
             api_injection = f"""
 import os
@@ -277,8 +304,8 @@ if not api_key:
     print("ERROR: {api_key_var} not found in environment")
     exit(1)
 """
-            # Insérer après les imports
-            import_end = prepared_code.find('\n\n')
+            # Insérer après les imports (après l'injection UTF-8)
+            import_end = prepared_code.find('\n\n', import_end + 1)
             if import_end > 0:
                 prepared_code = prepared_code[:import_end] + api_injection + prepared_code[import_end:]
             else:
@@ -402,17 +429,22 @@ if not api_key:
                 temp_file.write(code)
                 temp_file_path = temp_file.name
             
-            # Exécution dans un subprocess isolé avec gestion UTF-8 Windows
+            # Préparer l'environnement avec encodage UTF-8
+            env_copy = os.environ.copy()
+            env_copy['PYTHONIOENCODING'] = 'utf-8'
+            env_copy['PYTHONUTF8'] = '1'
+
+            # Exécution dans un subprocess isolé avec gestion UTF-8 améliorée
             result = subprocess.run(
                 [sys.executable, temp_file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=False,  # Pas de décodage automatique pour gérer UTF-8 manuellement
+                text=False,  # Pas de décodage automatique pour contrôle total
                 timeout=timeout,
-                env=os.environ.copy()  # Passe les variables d'environnement
+                env=env_copy  # Utiliser l'environnement avec UTF-8 forcé
             )
             
-            # Décodage UTF-8 manuel (même approche que curl dans gui.py)
+            # Décodage UTF-8 manuel avec gestion améliorée des caractères spéciaux
             stdout_decoded = ""
             stderr_decoded = ""
             
@@ -420,14 +452,21 @@ if not api_key:
                 try:
                     stdout_decoded = result.stdout.decode('utf-8')
                 except UnicodeDecodeError:
-                    # Fallback avec encoding par défaut
-                    stdout_decoded = result.stdout.decode('cp1252', errors='ignore')
+                    # Fallback avec gestion des erreurs améliorée
+                    try:
+                        stdout_decoded = result.stdout.decode('cp1252', errors='replace')
+                    except UnicodeDecodeError:
+                        stdout_decoded = result.stdout.decode('latin1', errors='replace')
             
             if result.stderr:
                 try:
                     stderr_decoded = result.stderr.decode('utf-8')
                 except UnicodeDecodeError:
-                    stderr_decoded = result.stderr.decode('cp1252', errors='ignore')
+                    # Fallback avec gestion des erreurs améliorée
+                    try:
+                        stderr_decoded = result.stderr.decode('cp1252', errors='replace')
+                    except UnicodeDecodeError:
+                        stderr_decoded = result.stderr.decode('latin1', errors='replace')
             
             # Créer un objet résultat avec les chaînes décodées (compatible avec l'ancien format)
             class DecodedResult:

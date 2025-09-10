@@ -313,8 +313,6 @@ def preparer_requete_curl(final_prompt):
     Phase 1 - Nouvelle implémentation avec fichier JSON temporaire
     Prépare une commande curl sécurisée en utilisant un fichier payload externe
     """
-    print(f"[DEBUG] === PHASE 1 - CURL SÉCURISÉ VIA FICHIER JSON ===")
-    
     # Récupérer le profil API actuel avec mapping V2
     provider = profilAPIActuel.get('name', '').lower()
     chat_config = profilAPIActuel.get('chat', {})
@@ -327,11 +325,6 @@ def preparer_requete_curl(final_prompt):
     else:
         template_id = f"{provider}_{template_type}"
     
-    print(f"[DEBUG] Provider: {provider}")
-    print(f"[DEBUG] Method: {method}")
-    print(f"[DEBUG] Template ID: {template_id}")
-    print(f"[DEBUG] Final prompt: {final_prompt[:100]}...")
-    
     try:
         # Étape 1: Obtenir la commande curl avec template APIManager
         curl_command = api_manager.get_processed_template(template_id, profilAPIActuel, final_prompt)
@@ -340,8 +333,6 @@ def preparer_requete_curl(final_prompt):
             print(f"[ERROR] Aucun template trouvé pour {template_id}")
             return None
         
-        print(f"[DEBUG] Template curl obtenu ({len(curl_command)} chars)")
-        
         # Étape 2: Extraire le JSON du template curl
         base_command, json_payload = extract_json_from_curl(curl_command)
         
@@ -349,14 +340,9 @@ def preparer_requete_curl(final_prompt):
             print(f"[ERROR] Impossible d'extraire le JSON du template")
             return curl_command  # Fallback vers ancien système
         
-        print(f"[DEBUG] JSON payload extrait avec succès")
-        print(f"[DEBUG] Base command: {base_command[:100]}...")
-        
         # Étape 3: Créer le fichier payload temporaire
         payload_manager = PayloadManager(api_profile=provider)
         payload_file = payload_manager.create_payload_file(json_payload, prefix="request")
-        
-        print(f"[DEBUG] Fichier payload créé: {payload_file}")
         
         # Étape 4: Construire la nouvelle commande curl avec -d @fichier
         # Normaliser pour Windows PowerShell
@@ -375,9 +361,6 @@ def preparer_requete_curl(final_prompt):
         # Construire la commande finale avec référence au fichier
         final_command = f'{base_command} -d @"{payload_file}"'
         
-        print(f"[DEBUG] Commande curl finale construite")
-        print(f"[DEBUG] Utilisation fichier: {payload_file}")
-        
         return final_command, payload_file  # Retourner aussi le chemin pour nettoyage
         
     except Exception as e:
@@ -392,7 +375,6 @@ def corriger_commande_curl(commande):
     import re
     if not commande:
         return commande
-    print("[DEBUG] Correction curl simplifiée")
     corrected = commande.replace('\\\n', ' ').replace('\n', ' ')
     corrected = re.sub(r'\s+', ' ', corrected).strip()
     return corrected
@@ -403,16 +385,8 @@ def executer_commande_curl(requete_curl, payload_file=None):
     Phase 1 - Exécute la commande curl et nettoie le fichier payload
     Gestion automatique du nettoyage des fichiers temporaires
     """
-    print(f"[DEBUG] === EXÉCUTION CURL PHASE 1 ===")
-    
     # Nettoyer et normaliser la commande curl
     requete_curl = requete_curl.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
-
-    # Loguer la commande dans debug_curl.log
-    with open("debug_curl.log", "a", encoding="utf-8") as log_file:
-        log_file.write(f"\n--- Commande exécutée ---\n{requete_curl}\n")
-        if payload_file:
-            log_file.write(f"--- Fichier payload utilisé ---\n{payload_file}\n")
 
     try:
         # Exécuter la commande sans forcer l'encodage UTF-8
@@ -456,7 +430,7 @@ def executer_commande_curl(requete_curl, payload_file=None):
             if resultat_decode.stderr:
                 log_file.write(f"Stderr: {resultat_decode.stderr}\n")
         
-        print(f"[DEBUG] Curl exécuté - Code retour: {resultat_decode.returncode}")
+        print(f"Curl exécuté - Code retour: {resultat_decode.returncode}")
         
         return resultat_decode
     
@@ -476,19 +450,8 @@ def executer_commande_curl(requete_curl, payload_file=None):
         if payload_file and os.path.exists(payload_file):
             try:
                 os.remove(payload_file)
-                print(f"[DEBUG] Fichier payload nettoyé: {payload_file}")
             except Exception as e:
                 print(f"[WARNING] Impossible de nettoyer {payload_file}: {e}")
-
-# Plan de tests pour les logs en console
-# 1. Vérifier que les commandes curl s'exécutent correctement et que la sortie est capturée en UTF-8.
-# 2. Simuler une réponse contenant des caractères spéciaux pour s'assurer qu'ils sont correctement affichés.
-# 3. Tester avec des profils contenant des caractères non-ASCII dans les champs (par exemple, rôle ou comportement).
-# 4. Vérifier que les erreurs de décodage (UnicodeDecodeError) ne se produisent plus.
-# 5. Ajouter des logs en console pour afficher les étapes critiques :
-#    - Commande curl exécutée
-#    - Résultat brut de la commande
-#    - Texte extrait après traitement.
 
 def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
     """
@@ -523,17 +486,17 @@ def afficher_resultat(resultat, requete_curl, champ_r, champ_q):
                     # Fallback sur name en minuscules
                     provider = profil.get('name', '').lower() if profil else 'auto'
                 
-                print(f"[DEBUG] Provider détecté: {provider} (template_id: {template_id})")
+                print(f"Provider détecté: {provider} (template_id: {template_id})")
                 
                 success, texte_cible, api_detectee = parser.parse_response(reponse_json, provider)
                 
                 if not success and provider != 'auto':
                     # Fallback vers auto si le provider spécifique échoue
-                    print(f"[DEBUG] Parsing {provider} échoué, essai avec auto...")
+                    print(f"Parsing {provider} échoué, essai avec auto...")
                     success, texte_cible, api_detectee = parser.parse_response(reponse_json, 'auto')
                 
                 if success:
-                    print(f"[DEBUG] Parsing réussi avec provider: {api_detectee}")
+                    print(f"Parsing réussi avec provider: {api_detectee}")
                     print(f"🎯 API détectée: {api_detectee}")
                     print(f"📝 Texte extrait: {texte_cible[:100]}...")
                     
@@ -659,7 +622,7 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
             # Construire le prompt final - PAS d'échappement supplémentaire nécessaire
             question_finale = "\\n".join(prompt_parts)
             
-            print(f"[DEBUG] Prompt construit avec historique sécurisé ({len(question_finale)} chars)")
+            print(f"Prompt construit avec historique sécurisé ({len(question_finale)} chars)")
         else:
             # Fallback vers l'ancienne méthode si pas de ConversationManager
             historique = champ_history.get('1.0', tk.END).strip()
@@ -674,7 +637,7 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
         # DÉCISION: Méthode curl ou native
         if method == 'native':
             # ===== MODE NATIVE =====
-            print("[DEBUG] === UTILISATION MODE NATIVE ===")
+            print("=== UTILISATION MODE NATIVE ===")
             
             # Initialiser le NativeManager
             native_manager = NativeManager()
@@ -691,7 +654,7 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 'SYSTEM_PROMPT_BEHAVIOR': values_config.get('behavior', '')
             }
             
-            print(f"[DEBUG] Variables V2 natives: {variables}")
+            print(f"Variables V2 natives: {variables}")
             
             # Construire le chemin du template native selon la structure V2
             provider_name = profil.get('name', '').lower()
@@ -700,7 +663,7 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
             if not os.path.exists(template_path):
                 raise FileNotFoundError(f"Template Python non trouvé: {template_path}")
             
-            print(f"[DEBUG] Template native: {template_path}")
+            print(f"Template native: {template_path}")
             
             with open(template_path, 'r', encoding='utf-8') as f:
                 template_string = f.read()
@@ -726,55 +689,82 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
             
         else:
             # ===== MODE CURL (par défaut) =====
-            print("[DEBUG] === UTILISATION PHASE 1 - PAYLOAD MANAGER ===")
+            print("=== UTILISATION PHASE 1 - PAYLOAD MANAGER ===")
             resultat_preparation = preparer_requete_curl(question_finale)
             
             # Vérifier si on a un fichier payload ou ancien système
             if isinstance(resultat_preparation, tuple) and len(resultat_preparation) == 2:
                 # Nouveau système Phase 1 avec fichier payload
                 requete_curl, payload_file = resultat_preparation
-                print(f"[DEBUG] Phase 1 - Fichier payload: {payload_file}")
+                print(f"Phase 1 - Fichier payload: {payload_file}")
             else:
                 # Ancien système fallback
                 requete_curl = resultat_preparation
                 payload_file = None
-                print(f"[DEBUG] Fallback ancien système")
-            
-            # ÉTAPE 2 DEBUG : Journaliser la requête JSON finale
-            print("=" * 60)
-            print("🔍 ÉTAPE 2 - REQUÊTE CURL PHASE 1")
-            print("=" * 60)
-            print(f"Question finale (après échappement): {len(question_finale)} chars")
-            print(f"Requête curl: {len(requete_curl)} chars")
-            if payload_file:
-                print(f"Fichier payload: {payload_file}")
-            print("")
-            print("CONTENU question_finale:")
-            print(question_finale[:500] + "..." if len(question_finale) > 500 else question_finale)
-            print("")
-            print("REQUÊTE CURL COMPLÈTE:")
-            print(requete_curl)
-            print("=" * 60)
             
             # Exécuter avec le nouveau système qui gère automatiquement le nettoyage
             resultat = executer_commande_curl(requete_curl, payload_file)
-            
-            # ÉTAPE 2 DEBUG : Journaliser la réponse brute
-            print("=" * 60)
-            print("🔍 RÉPONSE API BRUTE")
-            print("=" * 60)
-            print(f"Return code: {resultat.returncode}")
-            if resultat.returncode == 0:
-                print(f"Stdout length: {len(resultat.stdout)} chars")
-                print("RÉPONSE JSON BRUTE:")
-                print(resultat.stdout[:1000] + "..." if len(resultat.stdout) > 1000 else resultat.stdout)
-            else:
-                print(f"Stderr: {resultat.stderr}")
-            print("=" * 60)
         
         # 6. Traiter la réponse
         if resultat.returncode == 0:
-            try:
+            # Gestion spéciale pour le mode natif
+            if method == 'native':
+                # Mode natif: détecter automatiquement le format (JSON ou texte brut)
+                stdout = resultat.stdout.strip()
+
+                # Essayer de détecter si c'est du JSON
+                try:
+                    reponse_json = json.loads(stdout)
+                    print(f"Format détecté: JSON pour {profil.get('name', 'unknown')}")
+
+                    # C'est du JSON - utiliser response_parser pour extraire le texte
+                    try:
+                        from response_parser import parse_response
+
+                        # Utiliser le response_path du profil
+                        chat_config = profil.get('chat', {})
+                        response_path = chat_config.get('response_path', profil.get('response_path', []))
+                        provider = profil.get('name', 'unknown')
+
+                        print(f"Parsing JSON avec provider: {provider}")
+                        print(f"Response path: {response_path}")
+
+                        # Extraire le texte du JSON
+                        texte_reponse = parse_response(reponse_json, response_path)
+
+                        if not texte_reponse:
+                            # Fallback: afficher une erreur mais pas le JSON brut
+                            texte_reponse = f"❌ Erreur extraction texte pour {provider}"
+                            print(f"❌ Extraction texte échouée pour {provider}")
+
+                        print(f"✅ Mode natif JSON: texte extrait ({len(texte_reponse)} chars)")
+
+                    except ImportError as e:
+                        print(f"Fallback parsing JSON: {e}")
+                        # Fallback basique pour les providers connus
+                        try:
+                            if provider == 'Gemini':
+                                texte_reponse = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+                            else:
+                                texte_reponse = f"❌ Provider {provider} non supporté en fallback JSON"
+                        except Exception as e2:
+                            texte_reponse = f"❌ Erreur parsing JSON fallback: {e2}"
+
+                    except Exception as e:
+                        texte_reponse = f"❌ Erreur parsing JSON: {e}"
+                        print(f"❌ Erreur parsing JSON: {e}")
+
+                except json.JSONDecodeError:
+                    # Ce n'est pas du JSON - c'est du texte brut (comme Mistral)
+                    print(f"Format détecté: TEXTE BRUT pour {profil.get('name', 'unknown')}")
+                    texte_reponse = stdout  # Utiliser directement la sortie
+                    print(f"✅ Mode natif texte brut: réponse directe ({len(texte_reponse)} chars)")
+
+                except Exception as e:
+                    texte_reponse = f"❌ Erreur traitement natif: {e}"
+                    print(f"❌ Erreur traitement natif: {e}")
+            else:
+                # Mode curl: parser le JSON de l'API
                 reponse_json = json.loads(resultat.stdout)
                 
                 # PHASE 2: Utiliser le nouveau système response_parser générique
@@ -786,14 +776,14 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                     response_path = chat_config.get('response_path', profil.get('response_path', []))
                     provider = profil.get('name', 'unknown')
                     
-                    print(f"[DEBUG] Parsing Phase 2 avec provider: {provider}")
-                    print(f"[DEBUG] Response path: {response_path}")
+                    print(f"Parsing Phase 2 avec provider: {provider}")
+                    print(f"Response path: {response_path}")
                     
                     # Extraction générique avec le nouveau parser
                     texte_reponse = parse_response(reponse_json, response_path)
                     
                     if not texte_reponse:
-                        # Si le parsing échoue, afficher l'erreur avec structure debug
+                        # Si le parsing échoue, afficher l'erreur avec structure
                         from response_parser import debug_json_structure
                         structure = debug_json_structure(reponse_json, max_depth=2)
                         champ_r.insert('1.0', f"❌ Erreur parsing {provider} avec path {response_path}\\n"
@@ -804,23 +794,28 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                     
                 except ImportError:
                     # Fallback vers l'ancien système hardcodé (Gemini seulement)
-                    print("[DEBUG] Fallback vers ancien parsing Gemini")
+                    print("Fallback vers ancien parsing Gemini")
                     texte_reponse = reponse_json["candidates"][0]["content"]["parts"][0]["text"]
+                    
+                except json.JSONDecodeError as e:
+                    champ_r.insert('1.0', f"Erreur de parsing JSON: {e}")
+                    print(f"❌ Erreur JSON: {e}")
+                    return
+            
+            # 7. Ajouter la réponse au ConversationManager (pour les deux modes)
+            if conversation_manager:
+                conversation_manager.add_message('model', texte_reponse)
                 
-                # 7. Ajouter la réponse au ConversationManager
-                if conversation_manager:
-                    conversation_manager.add_message('model', texte_reponse)
+                # 8. Mettre à jour l'affichage de l'historique
+                nouvel_historique = conversation_manager.get_display_history()
+                champ_history.delete('1.0', tk.END)
+                champ_history.insert(tk.END, nouvel_historique)
+                
+                # 9. Mettre à jour l'indicateur de statut
+                if status_label:
+                    status_indicator = conversation_manager.get_status_indicator()
+                    status_label.config(text=status_indicator)
                     
-                    # 8. Mettre à jour l'affichage de l'historique
-                    nouvel_historique = conversation_manager.get_display_history()
-                    champ_history.delete('1.0', tk.END)
-                    champ_history.insert(tk.END, nouvel_historique)
-                    
-                    # 9. Mettre à jour l'indicateur de statut
-                    if status_label:
-                        status_indicator = conversation_manager.get_status_indicator()
-                        status_label.config(text=status_indicator)
-                        
                     # 10. Logging des statistiques
                     stats = conversation_manager.get_stats()
                     print(f"📊 Stats: {stats['total_words']} mots, {stats['total_sentences']} phrases")
@@ -857,9 +852,6 @@ def soumettreQuestionAPI(champ_q, champ_r, champ_history, conversation_manager=N
                 # Supprimer le contenu du champ question
                 champ_q.delete('1.0', tk.END)
                 
-            except json.JSONDecodeError as e:
-                champ_r.insert('1.0', f"Erreur de parsing JSON: {e}")
-                print(f"❌ Erreur JSON: {e}")
         else:
             champ_r.insert('1.0', f"Erreur API: {resultat.stderr}")
             print(f"❌ Erreur API: {resultat.stderr}")
@@ -894,13 +886,13 @@ def ouvrir_fenetre_apitest():
     fenetre.title("APItest")
     fenetre.geometry("800x600")  # Augmentation de la taille pour plus d'espace
 
-    print("[DEBUG] Ouverture de la fenêtre APItest")
+    print("Ouverture de la fenêtre APItest")
 
     def on_close():
-        print("[DEBUG] Fermeture de la fenêtre APItest")
+        print("Fermeture de la fenêtre APItest")
         fenetre.destroy()
         if not root.winfo_children():  # Si aucune autre fenêtre n'est ouverte
-            print("[DEBUG] Aucune autre fenêtre ouverte, fermeture de l'application principale")
+            print("Aucune autre fenêtre ouverte, fermeture de l'application principale")
             root.quit()  # Quitte proprement l'application
 
     fenetre.protocol("WM_DELETE_WINDOW", on_close)
@@ -996,10 +988,10 @@ def ouvrir_fenetre_apitest():
                     template_content = api_manager.get_processed_template(template_id, profil, "Test API message")
             
             if template_content:
-                print(f"[DEBUG] Template traité avec placeholders: {template_content[:200]}...")
+                print(f"Template traité avec placeholders: {template_content[:200]}...")
                 return template_content
             else:
-                print(f"[DEBUG] Aucun template trouvé pour {template_id}")
+                print(f"Aucun template trouvé pour {template_id}")
                 return ""
                 
         elif method == 'native':
@@ -1419,7 +1411,7 @@ def open_setup_menu():
                     continue
             
             # Si tout échoue, retourner des valeurs par défaut pour éviter l'erreur
-            print(f"[DEBUG] Profil {profil} non trouvé, utilisation des valeurs par défaut")
+            print(f"Profil {profil} non trouvé, utilisation des valeurs par défaut")
             return {
                 "api_key": "",
                 "role": "",
@@ -1431,7 +1423,7 @@ def open_setup_menu():
             }
             
         except Exception as e:
-            print(f"[DEBUG] Erreur lors du chargement du profil {profil}: {e}")
+            print(f"Erreur lors du chargement du profil {profil}: {e}")
             # Retourner des valeurs par défaut au lieu d'afficher une popup d'erreur
             return {
                 "api_key": "",
@@ -1446,16 +1438,16 @@ def open_setup_menu():
     # Fonction helper pour charger les données avec le nouveau mapping
     def charger_donnees_avec_nouveau_mapping(donnees_profil):
         """Helper pour charger les données depuis la nouvelle structure chat.values/placeholders"""
-        print(f"[DEBUG] charger_donnees_avec_nouveau_mapping appelé avec: {type(donnees_profil)}")
-        print(f"[DEBUG] Clés disponibles: {list(donnees_profil.keys()) if isinstance(donnees_profil, dict) else 'Pas un dict'}")
+        print(f"charger_donnees_avec_nouveau_mapping appelé avec: {type(donnees_profil)}")
+        print(f"Clés disponibles: {list(donnees_profil.keys()) if isinstance(donnees_profil, dict) else 'Pas un dict'}")
         
         chat_data = donnees_profil.get("chat", {})
         values_data = chat_data.get("values", {})
         placeholders_data = chat_data.get("placeholders", {})
         
-        print(f"[DEBUG] chat_data trouvé: {bool(chat_data)}")
-        print(f"[DEBUG] values_data: {values_data}")
-        print(f"[DEBUG] placeholders_data: {placeholders_data}")
+        print(f"chat_data trouvé: {bool(chat_data)}")
+        print(f"values_data: {values_data}")
+        print(f"placeholders_data: {placeholders_data}")
         
         # 1. VALEURS UTILISATEUR (depuis chat.values)
         api_key_var.set(values_data.get("api_key", ""))
@@ -1476,7 +1468,7 @@ def open_setup_menu():
         response_path = chat_data.get("response_path", ["candidates", 0, "content", "parts", 0, "text"])
         set_response_path_text(response_path)
         
-        print(f"[DEBUG] Placeholders chargés:")
+        print(f"Placeholders chargés:")
         print(f"  - placeholder_model_var: {placeholder_model_var.get()}")
         print(f"  - placeholder_role_var: {placeholder_role_var.get()}")
         print(f"  - user_prompt_var: {user_prompt_var.get()}")
@@ -1484,7 +1476,7 @@ def open_setup_menu():
         
         # 4. FALLBACK: Support ancien format pour compatibilité
         if not chat_data:
-            print(f"[DEBUG] Ancien format détecté, utilisation format legacy")
+            print(f"Ancien format détecté, utilisation format legacy")
             api_key_var.set(donnees_profil.get("api_key", ""))
             role_var.set(donnees_profil.get("role", ""))
             set_default_behavior_text(donnees_profil.get("behavior", ""))  # Utiliser la fonction pour Text widget
@@ -1500,18 +1492,18 @@ def open_setup_menu():
     # Fonction pour mettre à jour les champs du formulaire en fonction du profil sélectionné
     def mettre_a_jour_champs(event):
         profil_selectionne = selected_model.get()
-        print(f"[DEBUG] mettre_a_jour_champs appelé pour profil: {profil_selectionne}")
+        print(f"mettre_a_jour_champs appelé pour profil: {profil_selectionne}")
         
         donnees_profil = charger_donnees_profil(profil_selectionne)
-        print(f"[DEBUG] Données profil chargées: {type(donnees_profil)}")
+        print(f"Données profil chargées: {type(donnees_profil)}")
         if isinstance(donnees_profil, dict):
-            print(f"[DEBUG] Clés du profil: {list(donnees_profil.keys())}")
+            print(f"Clés du profil: {list(donnees_profil.keys())}")
 
-        print(f"[DEBUG] Changement de profil vers: {profil_selectionne}")
+        print(f"Changement de profil vers: {profil_selectionne}")
         
         # Utiliser la fonction helper pour le mapping
         chat_data = charger_donnees_avec_nouveau_mapping(donnees_profil)
-        print(f"[DEBUG] chat_data retourné: {bool(chat_data)}")
+        print(f"chat_data retourné: {bool(chat_data)}")
         
         # NOUVELLE LOGIQUE: Chargement commande selon méthode du profil
         if chat_data:
@@ -1519,8 +1511,8 @@ def open_setup_menu():
             llm_name = profil_selectionne.lower()
             template_type = "chat"  # Par défaut pour Setup API
             
-            print(f"[DEBUG] Chargement template: {llm_name}/{template_type}/{method}")
-            print(f"[DEBUG] Path recherché: templates/{template_type}/{llm_name}/{method}.txt ou {method}.py")
+            print(f"Chargement template: {llm_name}/{template_type}/{method}")
+            print(f"Path recherché: templates/{template_type}/{llm_name}/{method}.txt ou {method}.py")
             
             # SOLID V2: Charger le template via APIManager
             if method == 'native':
@@ -1584,22 +1576,22 @@ def open_setup_menu():
                         chat_data = profile_data.get('chat', {})
                         if chat_data:
                             method = chat_data.get('method', 'curl')
-                            print(f"[DEBUG] load_smart_template: méthode détectée depuis chat.method {provider}: {method}")
+                            print(f"load_smart_template: méthode détectée depuis chat.method {provider}: {method}")
                         else:
                             # Fallback vers l'ancien format
                             method = profile_data.get('method', 'curl')
-                            print(f"[DEBUG] load_smart_template: méthode détectée depuis profil legacy {provider}: {method}")
+                            print(f"load_smart_template: méthode détectée depuis profil legacy {provider}: {method}")
                     else:
                         method = selected_method.get()
-                        print(f"[DEBUG] load_smart_template: profil {provider} non trouvé, utilisation selected_method: {method}")
+                        print(f"load_smart_template: profil {provider} non trouvé, utilisation selected_method: {method}")
                 except Exception as e:
                     method = selected_method.get()
-                    print(f"[DEBUG] load_smart_template: erreur détection profil {provider}, utilisation selected_method: {method} (erreur: {e})")
+                    print(f"load_smart_template: erreur détection profil {provider}, utilisation selected_method: {method} (erreur: {e})")
             else:
                 method = 'curl'
-                print(f"[DEBUG] load_smart_template: provider différent, utilisation curl par défaut")
+                print(f"load_smart_template: provider différent, utilisation curl par défaut")
         
-        print(f"[DEBUG] load_smart_template: {provider} {template_type} {method} (display={for_display})")
+        print(f"load_smart_template: {provider} {template_type} {method} (display={for_display})")
         
         # Charger le template principal selon la méthode
         if method == 'native':
@@ -1608,13 +1600,13 @@ def open_setup_menu():
                 native_template_path = f"templates/{template_type}/{provider}/native.py"
                 with open(native_template_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                    print(f"[DEBUG] Template native.py chargé: {len(content)} caractères")
+                    print(f"Template native.py chargé: {len(content)} caractères")
                     return content
             except FileNotFoundError:
-                print(f"[DEBUG] Template native introuvable: {native_template_path}")
+                print(f"Template native introuvable: {native_template_path}")
                 return f"# Template Python pour {provider} non trouvé"
             except Exception as e:
-                print(f"[DEBUG] Erreur lecture template native: {e}")
+                print(f"Erreur lecture template native: {e}")
                 return f"# Erreur chargement template Python pour {provider}"
         
         else:
@@ -1622,10 +1614,10 @@ def open_setup_menu():
             template_id = f"{provider}_{template_type}"
             try:
                 content = api_manager.get_template_content(template_id)
-                print(f"[DEBUG] Template curl chargé via APIManager: {template_id}")
+                print(f"Template curl chargé via APIManager: {template_id}")
                 return content
             except Exception as e:
-                print(f"[DEBUG] Erreur APIManager pour {template_id}: {e}")
+                print(f"Erreur APIManager pour {template_id}: {e}")
                 return f"# Template curl pour {provider} non trouvé"
 
     def load_basic_template(provider, template_type="chat", method=None):
@@ -1651,22 +1643,22 @@ def open_setup_menu():
                         chat_data = profile_data.get('chat', {})
                         if chat_data:
                             method = chat_data.get('method', 'curl')
-                            print(f"[DEBUG] load_basic_template: méthode détectée depuis chat.method {provider}: {method}")
+                            print(f"load_basic_template: méthode détectée depuis chat.method {provider}: {method}")
                         else:
                             # Fallback vers l'ancien format
                             method = profile_data.get('method', 'curl')
-                            print(f"[DEBUG] load_basic_template: méthode détectée depuis profil legacy {provider}: {method}")
+                            print(f"load_basic_template: méthode détectée depuis profil legacy {provider}: {method}")
                     else:
                         method = selected_method.get()
-                        print(f"[DEBUG] load_basic_template: profil {provider} non trouvé, utilisation selected_method: {method}")
+                        print(f"load_basic_template: profil {provider} non trouvé, utilisation selected_method: {method}")
                 except Exception as e:
                     method = selected_method.get()
-                    print(f"[DEBUG] load_basic_template: erreur détection profil {provider}, utilisation selected_method: {method} (erreur: {e})")
+                    print(f"load_basic_template: erreur détection profil {provider}, utilisation selected_method: {method} (erreur: {e})")
             else:
                 method = 'curl'
-                print(f"[DEBUG] load_basic_template: provider différent, utilisation curl par défaut")
+                print(f"load_basic_template: provider différent, utilisation curl par défaut")
         
-        print(f"[DEBUG] load_basic_template: {provider} {template_type} {method}")
+        print(f"load_basic_template: {provider} {template_type} {method}")
         
         # Déterminer le fichier basic à charger selon la méthode
         if method == 'native':
@@ -1677,13 +1669,13 @@ def open_setup_menu():
         try:
             with open(basic_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                print(f"[DEBUG] Fichier basic chargé: {basic_file} ({len(content)} caractères)")
+                print(f"Fichier basic chargé: {basic_file} ({len(content)} caractères)")
                 return content
         except FileNotFoundError:
-            print(f"[DEBUG] Fichier basic introuvable: {basic_file}")
+            print(f"Fichier basic introuvable: {basic_file}")
             return f"# Fichier basic pour {provider} ({method}) non trouvé"
         except Exception as e:
-            print(f"[DEBUG] Erreur lecture fichier basic: {e}")
+            print(f"Erreur lecture fichier basic: {e}")
             return f"# Erreur chargement fichier basic pour {provider}"
         
         if method == "native":
@@ -1694,10 +1686,10 @@ def open_setup_menu():
                     try:
                         with open(native_template_path, 'r', encoding='utf-8') as f:
                             content = f.read()
-                        print(f"[DEBUG] Template native chargé: {native_template_path}")
+                        print(f"Template native chargé: {native_template_path}")
                         return content
                     except Exception as e:
-                        print(f"[DEBUG] Erreur lecture native: {e}")
+                        print(f"Erreur lecture native: {e}")
                         return f"# Erreur lecture template native {native_template_path}\n# {e}"
                 else:
                     # Template par défaut
@@ -1721,7 +1713,7 @@ system_behavior = "{{{{SYSTEM_PROMPT_BEHAVIOR}}}}"
 # TODO: Implémenter l'appel API pour {provider}
 print("Template native à implémenter pour {provider}")
 """
-                    print(f"[DEBUG] Template native par défaut généré pour {provider}")
+                    print(f"Template native par défaut généré pour {provider}")
                     return default_template
             else:
                 # Pour exécution : charger native_basic.py
@@ -1730,23 +1722,23 @@ print("Template native à implémenter pour {provider}")
                     try:
                         with open(native_basic_path, 'r', encoding='utf-8') as f:
                             content = f.read()
-                        print(f"[DEBUG] Template native_basic chargé: {native_basic_path}")
+                        print(f"Template native_basic chargé: {native_basic_path}")
                         return content
                     except Exception as e:
-                        print(f"[DEBUG] Erreur lecture native_basic: {e}")
+                        print(f"Erreur lecture native_basic: {e}")
                         return f"# Erreur lecture template native_basic {native_basic_path}\n# {e}"
                 else:
-                    print(f"[DEBUG] Template native_basic non trouvé: {native_basic_path}")
+                    print(f"Template native_basic non trouvé: {native_basic_path}")
                     return f"# Template native_basic non trouvé pour {provider}"
         else:
             # Mode curl : utiliser APIManager
             template_id = f"{provider}_{template_type}"
             template_content = api_manager.get_template_content(template_id)
             if template_content:
-                print(f"[DEBUG] Template curl chargé via APIManager: {template_id}")
+                print(f"Template curl chargé via APIManager: {template_id}")
                 return template_content
             else:
-                print(f"[DEBUG] Template curl non trouvé: {template_id}")
+                print(f"Template curl non trouvé: {template_id}")
                 return f"# Template curl non trouvé pour {provider}"
 
     def load_template_by_method(provider, template_type="chat", method=None):
@@ -1780,7 +1772,7 @@ print("Template native à implémenter pour {provider}")
             else:
                 method = 'curl'
         
-        print(f"[DEBUG] load_template_by_method: {provider} {template_type} {method}")
+        print(f"load_template_by_method: {provider} {template_type} {method}")
         
         # SOLID: Utiliser APIManager pour tous les templates
         if method == 'native':
@@ -1827,10 +1819,10 @@ print("Template native à implémenter pour {provider}")
         content = api_manager.get_template_basic_content(template_id)
         
         if content:
-            print(f"[DEBUG] get_execution_template: template basic chargé pour {template_id}")
+            print(f"get_execution_template: template basic chargé pour {template_id}")
             return content
         else:
-            print(f"[DEBUG] get_execution_template: template basic non trouvé pour {template_id}")
+            print(f"get_execution_template: template basic non trouvé pour {template_id}")
             return f"# Template basic {template_id} non trouvé"
 
     # Fonction pour définir un seul profil comme défaut
@@ -1855,15 +1847,15 @@ print("Template native à implémenter pour {provider}")
                     values_data = chat_data.get("values", {})
                     
                     if values_data.get("default", False):
-                        print(f"[DEBUG] Profil par défaut trouvé: {profil_name}")
+                        print(f"Profil par défaut trouvé: {profil_name}")
                         return profil_name
                 except Exception as e:
-                    print(f"[DEBUG] Erreur lors de la vérification du profil {profil_name}: {e}")
+                    print(f"Erreur lors de la vérification du profil {profil_name}: {e}")
                     continue
             
             # FALLBACK: Si aucun profil avec default=true, prendre le premier disponible
             if profils_disponibles:
-                print(f"[DEBUG] Aucun profil par défaut trouvé, utilisation du premier: {profils_disponibles[0]}")
+                print(f"Aucun profil par défaut trouvé, utilisation du premier: {profils_disponibles[0]}")
                 return profils_disponibles[0]
             
             return "Gemini"  # Fallback final
@@ -1889,10 +1881,10 @@ print("Template native à implémenter pour {provider}")
         method = selected_method.get()
         if method == "curl":
             # Mode curl : les labels seront gérés par creer_champs_dynamiques()
-            print("[DEBUG] Mode curl activé")
+            print("Mode curl activé")
         elif method == "native":
             # Mode native : les labels seront gérés par creer_champs_dynamiques()
-            print("[DEBUG] Mode native activé")
+            print("Mode native activé")
         
         # Basculer le contenu affiché selon la méthode sélectionnée
         switch_template_content()
@@ -1940,13 +1932,13 @@ print("Template native à implémenter pour {provider}")
                 data = json.load(f)
                 models = data.get('models', [])
                 default_model = data.get('default', models[0] if models else "")
-                print(f"[DEBUG] Modèles chargés depuis {models_file}: {len(models)} modèles")
+                print(f"Modèles chargés depuis {models_file}: {len(models)} modèles")
                 return models, default_model
         except FileNotFoundError:
-            print(f"[DEBUG] Fichier modèles introuvable: {models_file}, utilisation fallback")
+            print(f"Fichier modèles introuvable: {models_file}, utilisation fallback")
             return get_fallback_models(provider), ""
         except Exception as e:
-            print(f"[DEBUG] Erreur lecture fichier modèles {models_file}: {e}")
+            print(f"Erreur lecture fichier modèles {models_file}: {e}")
             return get_fallback_models(provider), ""
 
     def get_fallback_models(provider):
@@ -1980,7 +1972,7 @@ print("Template native à implémenter pour {provider}")
         
         # IMPORTANT: Charger le template selon le provider et sa méthode
         # Ceci assure que le changement de provider charge le bon template
-        print(f"[DEBUG] mettre_a_jour_modeles: provider changed to {provider}")
+        print(f"mettre_a_jour_modeles: provider changed to {provider}")
         # Note: mettre_a_jour_placeholders() sera appelée après et gérera le profil complet
     
     # Bind pour mise à jour automatique des modèles
@@ -1994,7 +1986,7 @@ print("Template native à implémenter pour {provider}")
         
         provider = selected_model.get().lower()
         if provider:
-            print(f"[DEBUG] mettre_a_jour_placeholders: Changement de provider vers: {provider}")
+            print(f"mettre_a_jour_placeholders: Changement de provider vers: {provider}")
             
             # 1. Charger le profil correspondant au nouveau provider
             try:
@@ -2003,15 +1995,15 @@ print("Template native à implémenter pour {provider}")
                 profil_data = charger_donnees_profil(profil_name)
                 
                 if profil_data:
-                    print(f"[DEBUG] Profil {profil_name} trouvé, chargement des données...")
+                    print(f"Profil {profil_name} trouvé, chargement des données...")
                     
                     # 2. Mettre à jour la méthode selon le profil
                     profile_method = profil_data.get('method', 'curl')
-                    print(f"[DEBUG] Méthode du profil {profil_name}: {profile_method}")
-                    print(f"[DEBUG] selected_method avant: {selected_method.get()}")
+                    print(f"Méthode du profil {profil_name}: {profile_method}")
+                    print(f"selected_method avant: {selected_method.get()}")
                     selected_method.set(profile_method)
-                    print(f"[DEBUG] selected_method après: {selected_method.get()}")
-                    print(f"[DEBUG] Méthode mise à jour: {profile_method}")
+                    print(f"selected_method après: {selected_method.get()}")
+                    print(f"Méthode mise à jour: {profile_method}")
                     
                     # 3. Charger les autres données du profil
                     if "placeholder_model" in profil_data:
@@ -2027,14 +2019,14 @@ print("Template native à implémenter pour {provider}")
                     
                     # 4. Charger le template selon la méthode du profil (explicite)
                     load_template_by_method(provider, "chat", method=profile_method)
-                    print(f"[DEBUG] Template {profile_method} chargé pour {provider}")
+                    print(f"Template {profile_method} chargé pour {provider}")
                     
                     # 5. Forcer la mise à jour de l'interface (labels, champs)
                     update_method_fields()
-                    print(f"[DEBUG] Interface mise à jour pour méthode {profile_method}")
+                    print(f"Interface mise à jour pour méthode {profile_method}")
                     
                 else:
-                    print(f"[DEBUG] Aucun profil trouvé pour {profil_name}, utilisation des valeurs par défaut")
+                    print(f"Aucun profil trouvé pour {profil_name}, utilisation des valeurs par défaut")
                     # Fallback vers méthode curl et extraction depuis templates
                     selected_method.set('curl')
                     
@@ -2056,7 +2048,7 @@ print("Template native à implémenter pour {provider}")
                     load_template_by_method(provider, "chat")
                     
             except Exception as e:
-                print(f"[DEBUG] Erreur chargement profil {provider}: {e}")
+                print(f"Erreur chargement profil {provider}: {e}")
                 # En cas d'erreur, revenir à curl par défaut
                 selected_method.set('curl')
                 load_template_by_method(provider, "chat")
@@ -2115,7 +2107,7 @@ print("Template native à implémenter pour {provider}")
             
             # Identifier tous les placeholders dans curl_basic.txt
             placeholders_found = re.findall(r'\{\{([^}]+)\}\}', basic_content)
-            print(f"[DEBUG] Placeholders trouvés dans {template_id}: {placeholders_found}")
+            print(f"Placeholders trouvés dans {template_id}: {placeholders_found}")
             
             # ÉTAPE 1B: Lire curl.txt pour extraire les valeurs par défaut
             concrete_full_path = os.path.join(".", concrete_template_path)
@@ -2264,7 +2256,7 @@ print("Template native à implémenter pour {provider}")
                     # Géré dans SYSTEM_PROMPT_ROLE si les deux existent
                     pass
             
-            print(f"[DEBUG] Valeurs extraites pour {template_id}: {valeurs_defaut}")
+            print(f"Valeurs extraites pour {template_id}: {valeurs_defaut}")
             return valeurs_defaut
             
         except Exception as e:
@@ -2277,9 +2269,36 @@ print("Template native à implémenter pour {provider}")
         1. VIDER et MASQUER tous les champs
         2. AFFICHER et PRÉREMPLIR seulement les champs nécessaires
         """
-        print(f"[DEBUG] Création champs dynamiques pour placeholders: {placeholders_found}")
+        print(f"Création champs dynamiques pour placeholders: {placeholders_found}")
         
-        # Dictionnaire de mapping des champs existants
+        # Définir les variables globales si elles ne sont pas encore définies
+        global placeholder_model_label, placeholder_model_entry, placeholder_model_var
+        global placeholder_role_label, placeholder_role_entry, placeholder_role_var
+        global placeholder_behavior_label, placeholder_behavior_entry, placeholder_behavior_var
+        global user_prompt_label, user_prompt_entry, user_prompt_var
+        global replace_apikey_label, replace_apikey_entry, replace_apikey_var
+        
+        # Initialiser à None si pas encore définies
+        try:
+            placeholder_model_label
+        except NameError:
+            placeholder_model_label = None
+        try:
+            placeholder_role_label
+        except NameError:
+            placeholder_role_label = None
+        try:
+            placeholder_behavior_label
+        except NameError:
+            placeholder_behavior_label = None
+        try:
+            user_prompt_label
+        except NameError:
+            user_prompt_label = None
+        try:
+            replace_apikey_label
+        except NameError:
+            replace_apikey_label = None
         champs_mapping = {
             "LLM_MODEL": {
                 "label": placeholder_model_label,
@@ -2324,7 +2343,7 @@ print("Template native à implémenter pour {provider}")
         }
         
         # ÉTAPE 1: VIDER et MASQUER TOUS LES CHAMPS (reset complet)
-        print("[DEBUG] ÉTAPE 1: Reset complet de tous les champs")
+        print("ÉTAPE 1: Reset complet de tous les champs")
         for placeholder, config in champs_mapping.items():
             try:
                 # Vider le champ
@@ -2332,17 +2351,17 @@ print("Template native à implémenter pour {provider}")
                 # Masquer le champ
                 config["label"].grid_remove()
                 config["entry"].grid_remove()
-                print(f"[DEBUG] Champ {placeholder} vidé et masqué")
+                print(f"Champ {placeholder} vidé et masqué")
             except Exception as e:
-                print(f"[DEBUG] Erreur reset {placeholder}: {e}")
+                print(f"Erreur reset {placeholder}: {e}")
         
         # ÉTAPE 2: AFFICHER et PRÉREMPLIR seulement les champs nécessaires
-        print(f"[DEBUG] ÉTAPE 2: Affichage des champs nécessaires: {placeholders_found}")
+        print(f"ÉTAPE 2: Affichage des champs nécessaires: {placeholders_found}")
         for placeholder in placeholders_found:
             if placeholder in champs_mapping:
                 config = champs_mapping[placeholder]
                 
-                print(f"[DEBUG] Traitement champ {placeholder}")
+                print(f"Traitement champ {placeholder}")
                 
                 # Afficher le champ
                 config["label"].grid(row=config["row"], column=0, sticky="w", pady=3, padx=(10,5))
@@ -2354,12 +2373,12 @@ print("Template native à implémenter pour {provider}")
                 # Préremplir avec la valeur par défaut (ou vide si pas de valeur)
                 if config["value_key"] in valeurs_defaut:
                     config["var"].set(valeurs_defaut[config["value_key"]])
-                    print(f"[DEBUG] Champ {placeholder} prérempli avec: {valeurs_defaut[config['value_key']]}")
+                    print(f"Champ {placeholder} prérempli avec: {valeurs_defaut[config['value_key']]}")
                 else:
                     config["var"].set("")  # Assurer que c'est vide
-                    print(f"[DEBUG] Champ {placeholder} laissé vide (pas de valeur)")
+                    print(f"Champ {placeholder} laissé vide (pas de valeur)")
         
-        print(f"[DEBUG] Reset et création dynamique terminés")
+        print(f"Reset et création dynamique terminés")
 
     def update_form_with_llm_data(template_id: str):
         """
@@ -2369,7 +2388,7 @@ print("Template native à implémenter pour {provider}")
         3. Prérempli les champs avec les valeurs par défaut
         4. Charge le contenu template selon la méthode (curl ou native)
         """
-        print(f"[DEBUG] Mise à jour formulaire pour template: {template_id}")
+        print(f"Mise à jour formulaire pour template: {template_id}")
         
         # Étape 1: Extraction des données
         valeurs_defaut = extraire_valeurs_par_defaut_du_template(template_id)
@@ -2389,7 +2408,7 @@ print("Template native à implémenter pour {provider}")
                 basic_content = f.read()
             placeholders_found = re.findall(r'\{\{([^}]+)\}\}', basic_content)
         
-        print(f"[DEBUG] Orchestration: placeholders={placeholders_found}, valeurs={valeurs_defaut}")
+        print(f"Orchestration: placeholders={placeholders_found}, valeurs={valeurs_defaut}")
         
         # Étape 2: Création et configuration dynamique des champs
         creer_champs_dynamiques(placeholders_found, valeurs_defaut)
@@ -2634,11 +2653,11 @@ print("Template native à implémenter pour {provider}")
         # Charger méthode et type template (nouveaux champs V2)
         if chat_data:
             selected_method.set(chat_data.get("method", "curl"))
-            print(f"[DEBUG] Méthode chargée depuis chat_data: {chat_data.get('method', 'curl')}")
+            print(f"Méthode chargée depuis chat_data: {chat_data.get('method', 'curl')}")
         else:
             # Fallback pour ancien format
             selected_method.set(donnees_profil.get("method", "curl"))
-            print(f"[DEBUG] Méthode chargée depuis donnees_profil (fallback): {donnees_profil.get('method', 'curl')}")
+            print(f"Méthode chargée depuis donnees_profil (fallback): {donnees_profil.get('method', 'curl')}")
         
         selected_template_type.set(donnees_profil.get("template_type", "chat"))
         
@@ -3124,7 +3143,7 @@ def open_setup_history_menu():
     def on_template_change_setup(*args):
         """Fonction appelée quand le template change dans Setup API - met à jour le formulaire dynamiquement"""
         template_name = template_var.get()
-        print(f"[DEBUG] Changement template Setup API: {template_name}")
+        print(f"Changement template Setup API: {template_name}")
         
         # Extraire le template_id depuis le nom affiché
         if "Template " in template_name:
@@ -3137,16 +3156,16 @@ def open_setup_history_menu():
                 profile_data = api_manager.load_profile(profile_name)
                 if profile_data and 'template_id' in profile_data:
                     template_id = profile_data['template_id']
-                    print(f"[DEBUG] Template Setup auto-détecté: {profile_name} -> {template_id}")
+                    print(f"Template Setup auto-détecté: {profile_name} -> {template_id}")
                 else:
                     # Fallback: construire template_id par convention {provider}_chat
                     template_id = f"{profile_name.lower()}_chat"
-                    print(f"[DEBUG] Template Setup fallback: {profile_name} -> {template_id}")
+                    print(f"Template Setup fallback: {profile_name} -> {template_id}")
             except Exception as e:
-                print(f"[DEBUG] Erreur détection template pour {profile_name}: {e}")
+                print(f"Erreur détection template pour {profile_name}: {e}")
                 template_id = "gemini_chat"  # Fallback de sécurité
             
-            print(f"[DEBUG] Template détecté pour Setup History: {template_id}")
+            print(f"Template détecté pour Setup History: {template_id}")
     
     auto_save_var = tk.BooleanVar(value=True)
     
@@ -3534,13 +3553,13 @@ def open_setup_history_menu():
                 profile_data = api_manager.load_profile(profile_name)
                 if profile_data and 'template_id' in profile_data:
                     template_id = profile_data['template_id']
-                    print(f"[DEBUG] Template History auto-détecté: {profile_name} -> {template_id}")
+                    print(f"Template History auto-détecté: {profile_name} -> {template_id}")
                 else:
                     # Fallback: construire template_id par convention {provider}_chat
                     template_id = f"{profile_name.lower()}_chat"
-                    print(f"[DEBUG] Template History fallback: {profile_name} -> {template_id}")
+                    print(f"Template History fallback: {profile_name} -> {template_id}")
             except Exception as e:
-                print(f"[DEBUG] Erreur détection template pour {profile_name}: {e}")
+                print(f"Erreur détection template pour {profile_name}: {e}")
                 template_id = "gemini_chat"  # Fallback de sécurité
             
             # Pas de mise à jour des placeholders ici - cette fonction concerne l'historique, pas Setup API

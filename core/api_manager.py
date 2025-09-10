@@ -349,7 +349,7 @@ class APIManager(IProfileManager):
                         if curl_file.exists():
                             template_id = f"{provider_dir.name}_chat"
                             templates.append(template_id)
-                            print(f"[DEBUG] Template V2 trouvé: {template_id} -> {curl_file}")
+                            print(f"Template V2 trouvé: {template_id} -> {curl_file}")
             else:
                 print(f"[WARNING] Dossier templates/chat non trouvé: {chat_dir}")
             
@@ -397,7 +397,7 @@ class APIManager(IProfileManager):
             
             for dir_path in templates_dirs:
                 dir_path.mkdir(parents=True, exist_ok=True)
-                print(f"[DEBUG] Dossier V2 créé/vérifié: {dir_path}")
+                print(f"Dossier V2 créé/vérifié: {dir_path}")
             
             print("[OK] Structure templates V2 vérifiée (SANS api_commands)")
             return True

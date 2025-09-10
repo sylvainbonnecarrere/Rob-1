@@ -1,4 +1,4 @@
-curl --location "https://api.mistral.ai/v1/agents" \
+curl --location "https://api.mistral.ai/v1/chat/completions" \
      --header 'Content-Type: application/json' \
      --header 'Accept: application/json' \
      --header "Authorization: Bearer $MISTRAL_API_KEY" \
@@ -6,9 +6,8 @@ curl --location "https://api.mistral.ai/v1/agents" \
     "model": "mistral-large-latest",
     "messages": [
      {
-        "instructions": "Assistant, expert développeur",
         "role": "user",
-        "content": "What is the best French cheese?"
+        "content": "You are a mouse, very smart. What is the best French cheese?"
       }
     ]
   }'

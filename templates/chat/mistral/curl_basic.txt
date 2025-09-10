@@ -1,14 +1,1 @@
-curl --location "https://api.mistral.ai/v1/agents" \
-     --header 'Content-Type: application/json' \
-     --header 'Accept: application/json' \
-     --header "Authorization: Bearer {{API_KEY}}" \
-     --data '{
-    "model": "{{LLM_MODEL}}",
-    "messages": [
-     {
-        "instructions": "{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}",
-        "role": "user",
-        "content": "{{USER_PROMPT}}"
-      }
-    ]
-  }'
+curl --location "https://api.mistral.ai/v1/chat/completions" --header "Content-Type: application/json" --header "Accept: application/json" --header "Authorization: Bearer {{API_KEY}}" --data "{\"model\": \"{{LLM_MODEL}}\", \"messages\": [{\"role\": \"system\", \"content\": \"{{SYSTEM_PROMPT_ROLE}}, {{SYSTEM_PROMPT_BEHAVIOR}}\"}, {\"role\": \"user\", \"content\": \"{{USER_PROMPT}}\"}]}"
