@@ -5,6 +5,14 @@ Ce fichier configure et démarre l'application FastAPI avec uvicorn.
 Il inclut la configuration CORS et intègre le routeur principal.
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Ajouter le répertoire courant au PYTHONPATH
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

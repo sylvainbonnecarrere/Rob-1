@@ -67,6 +67,14 @@ pip install -r requirements.txt
 - **🧪 Tests complets** : Validation offline et avec API réelle
 - **🏗️ Architecture SOLID** : OCP validé - extension sans modification
 
+#### Jalon 2.2 - Façade et Injection de Dépendances ✅
+- **🏭 LLMServiceFactory** : Factory pattern pour création centralisée des services
+- **🔌 Injection de Dépendances** : FastAPI DI pour découplage complet
+- **📋 Registre extensible** : Ajout facile de nouveaux fournisseurs LLM
+- **⚡ Cache intelligent** : Optimisation des performances optionnelle
+- **🌐 Nouveaux endpoints** : /test-service, /providers avec DI
+- **🎯 Principe DIP** : Endpoints dépendent de l'abstraction, pas du concret
+
 ## 🚀 Démarrage de l'Application
 
 ### Méthode 1 : Script de démarrage recommandé
@@ -96,13 +104,20 @@ python main.py
 
 Une fois l'application démarrée sur `http://localhost:8000` :
 
-- **🏥 Health Check** : `GET /api/health`
+- **Health Check** : `GET /api/health`
   ```json
   {"status": "ok", "service": "orchestrator"}
   ```
 
 - **📘 API Info** : `GET /api/`
   - Informations sur l'API et liens utiles
+
+- **🏭 Fournisseurs LLM** : `GET /api/providers`
+  - Liste des fournisseurs supportés et informations de cache
+
+- **🧪 Test Service LLM** : `POST /api/test-service`
+  - Test de l'injection de dépendances avec AgentConfig
+  - Validation de la factory et du service LLM
 
 - **📚 Documentation Interactive** : `GET /docs`
   - Interface Swagger UI pour tester l'API
