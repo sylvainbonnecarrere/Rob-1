@@ -1,0 +1,20 @@
+# Dépendances pour l'Orchestrator Agent Python
+# Jalon 1.1 - Fondations et modèles de données
+
+# Framework API asynchrone
+fastapi>=0.104.0
+
+# Serveur ASGI pour développement et production
+uvicorn[standard]>=0.24.0
+
+# Validation et sérialisation des données avec typage strict
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Jalon 2.1 - Adaptateurs LLM
+openai>=1.35.0
+
+# Dépendances additionnelles pour les prochains jalons :
+# - httpx (client HTTP asynchrone pour les APIs LLM)
+# - python-multipart (support upload de fichiers)
+# - python-dotenv (gestion des variables d'environnement)
